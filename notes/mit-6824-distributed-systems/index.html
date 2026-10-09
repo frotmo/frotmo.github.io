@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIT 6.824 分布式系统 · 零基础可视化学习指南</title>
+<meta name="description" content="面向零基础初学者的 MIT 6.824（6.5840）分布式系统课程可视化学习指南：论文精讲、Lab 通关手册、可视化概念库。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<!-- 导航 -->
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">
+      <span class="logo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="5" cy="6" r="2.4" fill="#fff"/><circle cx="19" cy="6" r="2.4" fill="#fff"/><circle cx="12" cy="18" r="2.4" fill="#fff"/><path d="M5 6h14M5 6l7 12M19 6l-7 12" stroke="#fff" stroke-width="1.3" opacity=".8"/></svg>
+      </span>
+      <span>MIT 6.824 学习指南<small>Distributed Systems · 零基础可视化</small></span>
+    </a>
+    <button class="nav-toggle" aria-label="菜单"><span></span><span></span><span></span></button>
+    <nav class="nav-links">
+      <a class="nav-back" href="../../index.html">← 学习笔记</a>
+      <a href="index.html">首页</a>
+      <a href="papers.html">论文精讲</a>
+      <a href="labs.html">Lab 通关</a>
+      <a href="notes.html">可视化笔记</a>
+    </nav>
+  </div>
+</header>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-inner">
+    <span class="eyebrow">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.6 6.5L21 11l-6.4 2.5L12 20l-2.6-6.5L3 11l6.4-2.5L12 2z" fill="currentColor"/></svg>
+      面向零基础 · 循序渐进 · 全程可视化
+    </span>
+    <h1>把 MIT 6.824 分布式系统<br>重新讲一遍，<span class="grad">讲给初学者听</span></h1>
+    <p class="lede">
+      MIT 6.824（现 6.5840）是全球最硬核的分布式系统课程之一：读经典论文、用 Go 写 Raft、做出容错的分片键值存储。
+      但它默认你有扎实的系统功底。本站把它的<b>论文、Lab、课堂笔记</b>三部分重新组织，
+      补齐前置知识、配上方方面面的可视化，让你只凭"初步的操作系统知识"也能真正学懂。
+    </p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="papers.html">从论文开始
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a class="btn btn-ghost" href="labs.html">直奔 Lab 通关手册</a>
+      <a class="btn btn-ghost" href="notes.html">先看可视化笔记</a>
+    </div>
+    <div class="hero-stats">
+      <div class="s"><b>18</b><span>篇经典论文精讲</span></div>
+      <div class="s"><b>5</b><span>个 Lab 全流程拆解</span></div>
+      <div class="s"><b>15</b><span>个可视化核心概念</span></div>
+      <div class="s"><b>0</b><span>分布式基础要求</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 这门课在讲什么 -->
+<section class="section wrap reveal">
+  <div class="section-head">
+    <div class="kicker">先建立直觉</div>
+    <h2>分布式系统，到底在解决什么问题？</h2>
+    <p>一句话：<b>让一群会随时坏掉的普通计算机，合作起来像一台永不宕机、又快又能装下一切的"超级计算机"</b>。
+       听起来简单，但"会坏掉"和"网络不可靠"这两件事，让一切都变得极其困难。</p>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="card hover">
+      <span class="tag tag-indigo">主题一</span>
+      <h3 style="margin-top:12px">容错 Fault Tolerance</h3>
+      <p>1000 台机器、庞大的网络，故障是常态而非例外。核心思路是<b>复制</b>：同一份数据存多份，坏了一台用另一台。
+         但"复制"立刻带来下一个难题——怎么保证多份副本一模一样？</p>
+    </div>
+    <div class="card hover">
+      <span class="tag tag-teal">主题二</span>
+      <h3 style="margin-top:12px">一致性 Consistency</h3>
+      <p>基础设施必须有明确的行为约定，比如"读到的必须是最近一次写入的值"。这就是<b>线性一致性</b>。
+         问题是：一致性、可用性、性能三者常常互相冲突，你必须做取舍。</p>
+    </div>
+    <div class="card hover">
+      <span class="tag tag-sky">主题三</span>
+      <h3 style="margin-top:12px">性能 Performance</h3>
+      <p>目标是<b>可扩展的吞吐量</b>：N 台机器带来 N 倍性能。手段是<b>分片（sharding）</b>——把数据切开分散到多台机器并行处理。
+         但分片又会和事务、一致性打架。</p>
+    </div>
+  </div>
+
+  <div class="note-box nb-key" style="margin-top:26px">
+    <span class="nb-ic">🔑</span>
+    <div>
+      <p><strong>贯穿全课的核心张力：</strong>容错和一致性都需要"通信"（把数据发给备份、确认缓存是否最新），
+         而通信又慢又难扩展。所以真实系统里，设计者常常<b>牺牲一致性来换速度</b>——
+         这就是为什么你会看到 GFS 的"弱一致性"、Memcached 的"最终一致"、Bitcoin 的"最长链胜出"等各种各样的设计点。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 学习路径 -->
+<section class="section" style="background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+  <div class="wrap reveal">
+    <div class="section-head">
+      <div class="kicker">推荐路径</div>
+      <h2>零基础怎么学？三步走</h2>
+      <p>不要一上来就啃论文 PDF。按下面这个顺序，先建立"问题意识"，再动手，最后回头查漏补缺。</p>
+    </div>
+    <div class="path">
+      <div class="path-step">
+        <div class="n">STEP 01</div>
+        <h3>① 先建立直觉</h3>
+        <p>用<a href="notes.html">可视化笔记</a>快速过一遍核心概念：RPC、复制、Quorum、线性一致性。每个概念只花 3~5 分钟，看图就懂。</p>
+        <a class="btn btn-ghost" href="notes.html">进入可视化笔记 →</a>
+        <span class="arrow"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </div>
+      <div class="path-step">
+        <div class="n">STEP 02</div>
+        <h3>② 读懂经典论文</h3>
+        <p>按主题读<a href="papers.html">论文精讲</a>：每篇讲清"核心设计理念"和"与其他论文的关键差异"，重点论文配深入剖析。</p>
+        <a class="btn btn-ghost" href="papers.html">进入论文精讲 →</a>
+        <span class="arrow"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </div>
+      <div class="path-step">
+        <div class="n">STEP 03</div>
+        <h3>③ 动手做 Lab</h3>
+        <p>用<a href="labs.html">Lab 通关手册</a>动手：每个 Lab 先补齐必备原理与 Go 范式，再对应论文原文，边做边理解设计目的。</p>
+        <a class="btn btn-ghost" href="labs.html">进入 Lab 通关 →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 三大部分 -->
+<section class="section wrap reveal">
+  <div class="section-head">
+    <div class="kicker">站点结构</div>
+    <h2>三大部分，各司其职</h2>
+    <p>论文讲"为什么这么设计"，Lab 讲"怎么把它写出来"，笔记讲"底层概念到底是什么意思"。</p>
+  </div>
+  <div class="grid grid-3">
+    <a class="entry-card c-papers" href="papers.html">
+      <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 4.5A1.5 1.5 0 015.5 3H11v18H5.5A1.5 1.5 0 014 19.5v-15z" stroke="currentColor" stroke-width="1.8"/><path d="M20 4.5A1.5 1.5 0 0018.5 3H13v18h5.5A1.5 1.5 0 0020 19.5v-15z" stroke="currentColor" stroke-width="1.8"/></svg></div>
+      <h3>论文精讲</h3>
+      <p>18 篇论文的核心设计理念、彼此的关键差异；对 MapReduce、GFS、Paxos、Raft、Spanner、链式复制、FaRM、Bitcoin、PBFT 等在架构与逻辑上最具特色的论文做深入剖析。</p>
+      <span class="more">查看全部论文 →</span>
+    </a>
+    <a class="entry-card c-labs" href="labs.html">
+      <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 3v5l-5 9a2 2 0 001.8 3h12.4A2 2 0 0019.9 17L15 8V3" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7 3h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+      <h3>Lab 通关手册</h3>
+      <p>5 个 Lab 从整体设计出发，先补齐必备的分布式原理（架构模式、Go 开发范式），再针对 Lab 文档过于简略之处，引用原论文对应内容补充说明。</p>
+      <span class="more">查看全部 Lab →</span>
+    </a>
+    <a class="entry-card c-notes" href="notes.html">
+      <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M8 13l2.5 2.5L16 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <h3>可视化笔记</h3>
+      <p>用清晰易懂的可视化方案呈现分布式设计理念与通信示例：动画序列图、交互式线性一致性检查器、拓扑与状态图，把笔记里简略晦涩之处讲透。</p>
+      <span class="more">进入可视化笔记 →</span>
+    </a>
+  </div>
+</section>
+
+<!-- 课程主题地图 -->
+<section class="section" style="background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+  <div class="wrap reveal">
+    <div class="section-head">
+      <div class="kicker">课程地图</div>
+      <h2>22 讲，六个主题板块</h2>
+      <p>这门课的讲次不是线性的知识堆叠，而是围绕六个主题层层推进。下面是"什么时候学什么"的全局视图。</p>
+    </div>
+
+    <div class="viz">
+      <div class="viz-title"><span class="dot"></span>课程主题演进地图（横轴为课程进度）</div>
+      <svg viewBox="0 0 720 340" role="img" aria-label="课程主题地图">
+        <defs>
+          <linearGradient id="lg1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#6366f1"/></linearGradient>
+          <linearGradient id="lg2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0d9488"/><stop offset="1" stop-color="#16a34a"/></linearGradient>
+          <linearGradient id="lg3" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0ea5e9"/><stop offset="1" stop-color="#4f46e5"/></linearGradient>
+          <linearGradient id="lg4" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d97706"/><stop offset="1" stop-color="#dc2626"/></linearGradient>
+          <linearGradient id="lg5" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9333ea"/><stop offset="1" stop-color="#db2777"/></linearGradient>
+          <linearGradient id="lg6" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#64748b"/><stop offset="1" stop-color="#0f172a"/></linearGradient>
+        </defs>
+        <line x1="40" y1="300" x2="690" y2="300" stroke="#cfd6e6" stroke-width="1.5"/>
+        <g font-size="11" fill="#8a93ab">
+          <text x="46" y="320">L1</text><text x="146" y="320">L4</text><text x="256" y="320">L8</text>
+          <text x="386" y="320">L12</text><text x="506" y="320">L16</text><text x="620" y="320">L20</text><text x="668" y="320">L22</text>
+        </g>
+        <!-- 板块条 -->
+        <rect x="40" y="34" width="180" height="34" rx="9" fill="url(#lg1)"/>
+        <text x="52" y="55" font-size="12.5" font-weight="700" fill="#fff">计算框架与存储</text>
+        <text x="52" y="88" font-size="11" fill="#4b5570">MapReduce · GFS · Go/RPC</text>
+
+        <rect x="150" y="106" width="200" height="34" rx="9" fill="url(#lg2)"/>
+        <text x="162" y="127" font-size="12.5" font-weight="700" fill="#fff">复制与共识</text>
+        <text x="162" y="160" font-size="11" fill="#4b5570">Paxos · Raft · ZooKeeper</text>
+
+        <rect x="256" y="178" width="150" height="34" rx="9" fill="url(#lg3)"/>
+        <text x="268" y="199" font-size="12.5" font-weight="700" fill="#fff">一致性与事务</text>
+        <text x="268" y="232" font-size="11" fill="#4b5570">线性一致性 · 2PC · Spanner</text>
+
+        <rect x="386" y="34" width="150" height="34" rx="9" fill="url(#lg4)"/>
+        <text x="398" y="55" font-size="12.5" font-weight="700" fill="#fff">高吞吐与扩展</text>
+        <text x="398" y="88" font-size="11" fill="#4b5570">链式复制 · FaRM · Memcached</text>
+
+        <rect x="506" y="106" width="130" height="34" rx="9" fill="url(#lg5)"/>
+        <text x="518" y="127" font-size="12.5" font-weight="700" fill="#fff">安全与验证</text>
+        <text x="518" y="160" font-size="11" fill="#4b5570">IronFleet · SUNDR</text>
+
+        <rect x="600" y="178" width="96" height="34" rx="9" fill="url(#lg6)"/>
+        <text x="610" y="199" font-size="12" font-weight="700" fill="#fff">去中心化</text>
+        <text x="610" y="232" font-size="11" fill="#4b5570">Bitcoin · PBFT</text>
+
+        <!-- 虚线连接 -->
+        <g stroke="#cfd6e6" stroke-width="1.2" stroke-dasharray="4 4" opacity=".7">
+          <line x1="130" y1="68" x2="200" y2="106"/>
+          <line x1="250" y1="140" x2="290" y2="178"/>
+          <line x1="406" y1="140" x2="420" y2="68"/>
+          <line x1="536" y1="140" x2="540" y2="106"/>
+          <line x1="570" y1="212" x2="600" y2="195"/>
+        </g>
+        <text x="360" y="286" text-anchor="middle" font-size="11.5" fill="#8a93ab">期中考试（L1–L11）↑　｜　期末考试（L12–L21）↑</text>
+      </svg>
+      <p class="viz-cap">每个板块都对应若干讲论文精讲；Lab 则横跨多个板块，从 MapReduce 一路做到分片 KV。</p>
+    </div>
+  </div>
+</section>
+
+<!-- Lab 依赖 -->
+<section class="section wrap reveal">
+  <div class="section-head">
+    <div class="kicker">Lab 全景</div>
+    <h2>5 个 Lab，是一条完整的工程主线</h2>
+    <p>它们不是孤立的练习，而是层层递进：从"并行计算框架"到"单机一致 KV"，再到"用 Raft 做容错"，最后"分片扩展"。
+       后面的 Lab 会复用前面的代码，所以每一步都要写扎实。</p>
+  </div>
+  <div class="viz">
+    <div class="viz-title"><span class="dot"></span>Lab 依赖与能力递进</div>
+    <svg viewBox="0 0 720 230" role="img" aria-label="Lab 依赖关系图">
+      <defs>
+        <marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#cfd6e6"/></marker>
+      </defs>
+      <g>
+        <rect x="16" y="60" width="126" height="92" rx="12" fill="#eef0ff" stroke="#c7c9fb"/>
+        <text x="79" y="88" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4f46e5">Lab 1</text>
+        <text x="79" y="107" text-anchor="middle" font-size="11.5" fill="#3730a3">MapReduce</text>
+        <text x="79" y="127" text-anchor="middle" font-size="10" fill="#6b7280">并行框架 · RPC</text>
+        <text x="79" y="141" text-anchor="middle" font-size="10" fill="#6b7280">容错重试</text>
+
+        <rect x="164" y="60" width="126" height="92" rx="12" fill="#e2f6f3" stroke="#a7e0d8"/>
+        <text x="227" y="88" text-anchor="middle" font-size="12.5" font-weight="800" fill="#0d9488">Lab 2</text>
+        <text x="227" y="107" text-anchor="middle" font-size="11.5" fill="#115e59">KV Server</text>
+        <text x="227" y="127" text-anchor="middle" font-size="10" fill="#6b7280">线性一致性</text>
+        <text x="227" y="141" text-anchor="middle" font-size="10" fill="#6b7280">至多一次语义</text>
+
+        <rect x="312" y="60" width="126" height="92" rx="12" fill="#e6f6fe" stroke="#bfe6f7"/>
+        <text x="375" y="88" text-anchor="middle" font-size="12.5" font-weight="800" fill="#0284c7">Lab 3</text>
+        <text x="375" y="107" text-anchor="middle" font-size="11.5" fill="#075985">Raft</text>
+        <text x="375" y="127" text-anchor="middle" font-size="10" fill="#6b7280">选举 · 日志 · 持久化</text>
+        <text x="375" y="141" text-anchor="middle" font-size="10" fill="#6b7280">快照</text>
+
+        <rect x="460" y="60" width="126" height="92" rx="12" fill="#fdf1de" stroke="#f3d9a8"/>
+        <text x="523" y="88" text-anchor="middle" font-size="12.5" font-weight="800" fill="#d97706">Lab 4</text>
+        <text x="523" y="107" text-anchor="middle" font-size="11.5" fill="#92400e">KV Raft</text>
+        <text x="523" y="127" text-anchor="middle" font-size="10" fill="#6b7280">复制状态机</text>
+        <text x="523" y="141" text-anchor="middle" font-size="10" fill="#6b7280">快照协作</text>
+
+        <rect x="596" y="60" width="112" height="92" rx="12" fill="#f4ebfe" stroke="#ddc9fb"/>
+        <text x="652" y="88" text-anchor="middle" font-size="12.5" font-weight="800" fill="#9333ea">Lab 5</text>
+        <text x="652" y="107" text-anchor="middle" font-size="11.5" fill="#6b21a8">Sharded KV</text>
+        <text x="652" y="127" text-anchor="middle" font-size="10" fill="#6b7280">分片 · 配置变更</text>
+        <text x="652" y="141" text-anchor="middle" font-size="10" fill="#6b7280">容错控制器</text>
+
+        <g stroke="#cfd6e6" stroke-width="1.6" marker-end="url(#la)">
+          <line x1="142" y1="106" x2="162" y2="106"/>
+          <line x1="290" y1="106" x2="310" y2="106"/>
+          <line x1="438" y1="106" x2="458" y2="106"/>
+          <line x1="586" y1="106" x2="594" y2="106"/>
+        </g>
+        <text x="360" y="200" text-anchor="middle" font-size="11.5" fill="#8a93ab">每一层都复用上一层：Lab 4 用 Lab 3 的 Raft，Lab 5 用 Lab 4 的复制状态机 + Lab 2 的 kvsrv</text>
+        </g>
+      </svg>
+    </div>
+    <p style="text-align:center;margin-top:20px"><a class="btn btn-primary" href="labs.html">打开 Lab 通关手册</a></p>
+</section>
+
+<!-- 如何使用 -->
+<section class="section" style="background:var(--surface);border-top:1px solid var(--border)">
+  <div class="wrap reveal">
+    <div class="section-head">
+      <div class="kicker">使用指南</div>
+      <h2>本站怎么用最有效</h2>
+    </div>
+    <div class="grid grid-2">
+      <div class="card">
+        <h3>🖱 交互式元素</h3>
+        <p style="margin-top:8px">带「▶ 播放」按钮的图是<b>动画序列图</b>，可以一步步看消息在网络里怎么流动；
+           带判定按钮的是<b>线性一致性检查器</b>，它会真的帮你搜索是否存在合法执行顺序。</p>
+      </div>
+      <div class="card">
+        <h3>📑 结构化标签</h3>
+        <p style="margin-top:8px">每篇论文按 <b>核心设计理念 / 关键差异 / 深入剖析 / 设计取舍</b> 四类标签组织；
+           每个 Lab 按 <b>设计目的 / 必备原理 / 代码结构 / 论文对应</b> 组织，方便你按需跳读。</p>
+      </div>
+      <div class="card">
+        <h3>🧭 左侧目录</h3>
+        <p style="margin-top:8px">内页左侧有常驻目录，会随滚动自动高亮当前小节；手机上会收起为顶部菜单。</p>
+      </div>
+      <div class="card">
+        <h3>🔗 交叉引用</h3>
+        <p style="margin-top:8px">Lab 页面会直接引用论文精讲里的对应内容，论文页面也会指向相关的 Lab 与概念图。
+           建议开着两个标签页对照看。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section wrap reveal">
+  <div class="section-head">
+    <div class="kicker">新手答疑</div>
+    <h2>开始之前，你可能想问</h2>
+  </div>
+  <div class="acc" data-multi="1">
+    <div class="acc-item open">
+      <button class="acc-head">我需要什么基础？<span class="arw">›</span></button>
+      <div class="acc-body"><div class="acc-body-inner">
+        <p>只要<b>初步的操作系统知识</b>就够了：知道进程、线程、内存、文件是什么，听说过"锁"和"并发"。
+           编程方面，会任意一门语言即可——Lab 用 Go，但 Go 很好上手，本站的 Lab 手册里专门有一节讲 Go 的并发范式。
+           <b>不需要</b>任何分布式系统基础。</p>
+      </div></div>
+    </div>
+    <div class="acc-item">
+      <button class="acc-head">论文很多，必须全读吗？<span class="arw">›</span></button>
+      <div class="acc-body"><div class="acc-body-inner">
+        <p>不必。课程本身也只要求每讲前读一篇。对初学者，建议优先吃透这几篇"主干"：
+           <b>MapReduce → GFS → Paxos → Raft → 线性一致性 → Spanner</b>。
+           它们串起了"并行计算 → 分布式存储 → 共识 → 一致性 → 全球事务"的完整主线。
+           其余论文可以当作"设计取舍的对照组"来读，理解它们各自解决了主干方案的哪个痛点。</p>
+      </div></div>
+    </div>
+    <div class="acc-item">
+      <button class="acc-head">Lab 看起来好难，怎么下手？<span class="arw">›</span></button>
+      <div class="acc-body"><div class="acc-body-inner">
+        <p>Lab 的难度是真实的（课程自己也标了 moderate/hard）。但难的不是算法，而是<b>并发调试</b>。
+           建议：① 先看 Lab 手册的"设计目的"和"必备原理"，建立整体框架再写代码；
+           ② 每写一小块就跑一次测试，别攒着；③ 全程开 <code>-race</code>；
+           ④ 卡住时回到对应论文，Lab 文档简略的地方，论文里往往有完整逻辑。</p>
+      </div></div>
+    </div>
+    <div class="acc-item">
+      <button class="acc-head">为什么 Lab 里叫 coordinator 而不是 master？<span class="arw">›</span></button>
+      <div class="acc-body"><div class="acc-body-inner">
+        <p>课程近年把 MapReduce 论文里的 "master" 改称 <b>coordinator</b>（协调者），避免与历史上有争议的术语混淆。
+           两者指的是同一个东西：负责分发任务、跟踪进度的那个中心进程。</p>
+      </div></div>
+    </div>
+    <div class="acc-item">
+      <button class="acc-head">本站内容和官方资料是什么关系？<span class="arw">›</span></button>
+      <div class="acc-body"><div class="acc-body-inner">
+        <p>本站是对 MIT 6.824 / 6.5840 官方公开资料（课程表、论文、Lecture Notes、Lab 说明）的<b>再组织与通俗化讲解</b>，
+           目的是降低入门门槛。做 Lab 时请以官方最新代码与说明为准，官方地址见页面底部链接。</p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 页脚 -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="about">
+      <h4>MIT 6.824 学习指南</h4>
+      <p>面向零基础初学者的分布式系统可视化学习站点，基于 MIT 6.824 / 6.5840 公开课程资料重新整理。</p>
+    </div>
+    <div>
+      <h4>本站导航</h4>
+      <ul>
+        <li><a href="papers.html">论文精讲</a></li>
+        <li><a href="labs.html">Lab 通关手册</a></li>
+        <li><a href="notes.html">可视化笔记</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>官方资料</h4>
+      <ul>
+        <li><a href="https://pdos.csail.mit.edu/6.824/schedule.html" target="_blank" rel="noopener">课程主页 / Schedule</a></li>
+        <li><a href="https://pdos.csail.mit.edu/6.824/papers/" target="_blank" rel="noopener">论文列表</a></li>
+        <li><a href="https://pdos.csail.mit.edu/6.824/labs/" target="_blank" rel="noopener">Lab 说明</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>本页为学习整理，版权归原始作者与 MIT PDOS 所有。</span>
+    <span>Distributed Systems · 从零开始</span>
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

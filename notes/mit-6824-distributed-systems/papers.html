@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>论文精讲 · MIT 6.824 学习指南</title>
+<meta name="description" content="MIT 6.824 全部核心论文精讲：核心设计理念、关键差异与深入剖析。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">
+      <span class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="5" cy="6" r="2.4" fill="#fff"/><circle cx="19" cy="6" r="2.4" fill="#fff"/><circle cx="12" cy="18" r="2.4" fill="#fff"/><path d="M5 6h14M5 6l7 12M19 6l-7 12" stroke="#fff" stroke-width="1.3" opacity=".8"/></svg></span>
+      <span>MIT 6.824 学习指南<small>Distributed Systems · 零基础可视化</small></span>
+    </a>
+    <button class="nav-toggle" aria-label="菜单"><span></span><span></span><span></span></button>
+    <nav class="nav-links">
+      <a class="nav-back" href="../../index.html">← 学习笔记</a>
+      <a href="index.html">首页</a>
+      <a href="papers.html">论文精讲</a>
+      <a href="labs.html">Lab 通关</a>
+      <a href="notes.html">可视化笔记</a>
+    </nav>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- 侧栏目录 -->
+  <aside class="sidebar">
+    <div class="side-title">论文总览</div>
+    <ul class="side-nav">
+      <li><a href="#howto">怎么读这些论文</a></li>
+      <li><a href="#matrix">论文对比矩阵</a></li>
+    </ul>
+    <div class="side-title">① 计算框架</div>
+    <ul class="side-nav">
+      <li><a href="#mapreduce">MapReduce</a></li>
+      <li><a href="#ray">Ray</a></li>
+      <li><a href="#go">Go 语言与环境</a></li>
+    </ul>
+    <div class="side-title">② 存储与缓存</div>
+    <ul class="side-nav">
+      <li><a href="#gfs">GFS</a></li>
+      <li><a href="#memcached">Memcached at Facebook</a></li>
+    </ul>
+    <div class="side-title">③ 复制与共识</div>
+    <ul class="side-nav">
+      <li><a href="#paxos">Paxos</a></li>
+      <li><a href="#raft">Raft</a></li>
+      <li><a href="#cr">Chain Replication</a></li>
+      <li><a href="#zookeeper">ZooKeeper</a></li>
+    </ul>
+    <div class="side-title">④ 一致性与事务</div>
+    <ul class="side-nav">
+      <li><a href="#linearizability">线性一致性</a></li>
+      <li><a href="#twopc">两阶段提交 2PC</a></li>
+      <li><a href="#spanner">Spanner</a></li>
+      <li><a href="#farm">FaRM</a></li>
+    </ul>
+    <div class="side-title">⑤ 验证与安全</div>
+    <ul class="side-nav">
+      <li><a href="#ironfleet">IronFleet</a></li>
+      <li><a href="#sundr">SUNDR</a></li>
+      <li><a href="#bitcoin">Bitcoin</a></li>
+      <li><a href="#bft">PBFT</a></li>
+      <li><a href="#lambda">AWS Lambda</a></li>
+    </ul>
+  </aside>
+
+  <main class="content">
+    <div class="crumb"><a href="index.html">首页</a> / 论文精讲</div>
+    <div class="page-head">
+      <h1>论文精讲</h1>
+      <p class="lede">MIT 6.824 每一讲都围绕一篇论文展开。这里按<b>主题板块</b>重新编排，每篇都讲清三件事：
+        <b>它的核心设计理念是什么</b>、<b>它和相邻论文的关键差异在哪</b>、
+        以及它在架构/逻辑上最有特色的地方<b>为什么这么设计</b>（设计取舍与动机）。</p>
+    </div>
+
+    <!-- 怎么读 -->
+    <section id="howto" style="margin-top:8px">
+      <h2>怎么读这些论文</h2>
+      <p>初学者最常见的误区，是把论文当教科书从头读到尾。论文是"研究叙事"，读法应该不同。建议按下面的顺序拆解任何一篇系统论文：</p>
+      <ol class="steps">
+        <li><h4>先问：它要解决什么问题？</h4><p>论文开头一定有个"现实痛点"。先抓住它——比如 MapReduce 面对的是"多机并行编程太难"，GFS 面对的是"数据太大、机器太多、故障太频繁"。</p></li>
+        <li><h4>再看：它的核心思路一句话是什么？</h4><p>如果一句话说不清，说明还没读懂。MapReduce 是"把计算抽象成 Map/Reduce 两个函数"；Raft 是"用日志 + 多数派 + 领导者，让一群机器像一台机器"。</p></li>
+        <li><h4>然后：它和"上一个方案"差在哪？</h4><p>系统论文的价值几乎全在"差异"里。Raft 之所以被广泛采用，不是因为比 Paxos 更强，而是因为<b>更好理解</b>——这是一个设计目标上的差异。</p></li>
+        <li><h4>最后：它牺牲了什么？</h4><p>没有免费的午餐。GFS 为了吞吐牺牲了强一致性；FaRM 为了极致性能要求数据必须装进内存。看清取舍，才算真的理解设计。</p></li>
+      </ol>
+      <div class="note-box nb-tip">
+        <span class="nb-ic">💡</span>
+        <div><p><strong>给零基础的建议：</strong>第一遍读论文时，跳过所有公式和性能图表，只抓"问题—思路—取舍"三样。等做完对应 Lab 再回头，你会发现那些细节突然都说得通了。</p></div>
+      </div>
+    </section>
+
+    <!-- 对比矩阵 -->
+    <section id="matrix">
+      <h2>论文对比矩阵</h2>
+      <p>把论文横向摆在一起，差异立刻显现。点击下面的主题标签筛选，或直接看全表。</p>
+      <div class="seq-controls" id="matrix-filter" style="margin-bottom:14px"></div>
+      <div class="table-wrap">
+        <table id="matrix-table">
+          <thead>
+            <tr><th>论文</th><th>要解决的问题</th><th>一致性</th><th>容错 / 复制</th><th>架构模式</th><th>关键创新</th></tr>
+          </thead>
+          <tbody>
+            <tr data-theme="compute"><td><strong>MapReduce</strong></td><td>大规模并行计算难写</td><td>不保证（中间数据确定性）</td><td>重跑失败任务</td><td>中心协调 + 无状态 Worker</td><td>把并行计算抽象成 Map/Reduce 两函数</td></tr>
+            <tr data-theme="compute"><td><strong>Ray</strong></td><td>细粒度、有状态的并行任务</td><td>单任务内确定性</td><td>血缘重建 + Fate Sharing</td><td>去中心 + 所有权分片</td><td>Future（未来值）+ Actor + 所有权</td></tr>
+            <tr data-theme="compute"><td><strong>Go 语言与环境</strong></td><td>并发编程与工程复杂度</td><td>—（语言层面）</td><td>—</td><td>—</td><td>goroutine + channel + GC 的组合</td></tr>
+            <tr data-theme="storage"><td><strong>GFS</strong></td><td>海量数据的并行读写</td><td>弱（定义 / 一致 / 不一致）</td><td>三副本 + 主副本</td><td>中心 Master + 分块 Chunkserver</td><td>单 Master 元数据 + 租约 + 追加语义</td></tr>
+            <tr data-theme="storage"><td><strong>Memcached at Facebook</strong></td><td>超高读负载压垮数据库</td><td>最终一致 + 读己之写</td><td>无副本 + Gutter 池</td><td>旁路缓存 + 分片/复制组合</td><td>租约防惊群、delete 而非 update</td></tr>
+            <tr data-theme="consensus"><td><strong>Paxos</strong></td><td>一组机器对单个值达成一致</td><td>强（共识）</td><td>Quorum（多数派）</td><td>无领导者 + 提议者/接受者</td><td>两阶段 prepare/accept 的多数派交集</td></tr>
+            <tr data-theme="consensus"><td><strong>Raft</strong></td><td>可理解的共识协议</td><td>强（线性一致）</td><td>Quorum + 领导者</td><td>强领导者 + 日志</td><td>分解为选举/日志/安全，可理解性优先</td></tr>
+            <tr data-theme="consensus"><td><strong>Chain Replication</strong></td><td>高吞吐的强一致复制</td><td>强（线性一致）</td><td>链式复制 + 配置服务</td><td>链（Head→…→Tail）+ CFG</td><td>写走全链、读只在尾，读写负载分离</td></tr>
+            <tr data-theme="consensus"><td><strong>ZooKeeper</strong></td><td>给应用提供协调原语</td><td>写线性一致，读客户端 FIFO</td><td>类 Raft（ZAB）</td><td>Leader + Follower 读本地</td><td>znode + watch + 会话/临时节点</td></tr>
+            <tr data-theme="txn"><td><strong>线性一致性</strong></td><td>定义"强一致"到底是什么</td><td>线性一致（定义）</td><td>—（规范）</td><td>—（规范）</td><td>线性化点：把并发操作映射成串行</td></tr>
+            <tr data-theme="txn"><td><strong>两阶段提交 2PC</strong></td><td>跨分片操作的原子性</td><td>可串行化（配合 2PL）</td><td>无（需要所有参与者）</td><td>协调者 + 参与者</td><td>Prepare/Commit 两阶段 + 阻塞式恢复</td></tr>
+            <tr data-theme="txn"><td><strong>Spanner</strong></td><td>跨数据中心的事务与复制</td><td>外部一致（≈线性一致）</td><td>Paxos 复制每组分片</td><td>2PC over Paxos + 分片</td><td>TrueTime + 快照隔离 + 提交等待</td></tr>
+            <tr data-theme="txn"><td><strong>FaRM</strong></td><td>内存级超高速分布式事务</td><td>可串行化（乐观）</td><td>主备 + NVRAM</td><td>分片主备 + 单侧 RDMA</td><td>乐观并发控制 + RDMA 单边读 + 非易失内存</td></tr>
+            <tr data-theme="security"><td><strong>IronFleet</strong></td><td>证明分布式系统真的正确</td><td>—（验证方法）</td><td>—（验证方法）</td><td>分层状态机 + 精化</td><td>把实现逐层精化到规范，机器检查证明</td></tr>
+            <tr data-theme="security"><td><strong>SUNDR</strong></td><td>不可信服务器上的可信存储</td><td>分叉一致性</td><td>无（完整性靠密码学）</td><td>客户端签名日志 / 哈希树</td><td>版本向量检测"分叉攻击"</td></tr>
+            <tr data-theme="security"><td><strong>Bitcoin</strong></td><td>无信任主体的共识与支付</td><td>概率最终一致</td><td>工作量证明 + 最长链</td><td>P2P 泛洪 + 区块链</td><td>用算力投票解决分叉，无需身份</td></tr>
+            <tr data-theme="security"><td><strong>PBFT</strong></td><td>存在恶意节点时的复制</td><td>强（含拜占庭容错）</td><td>3f+1 副本容忍 f 个恶意</td><td>主节点 + 三阶段投票 + 视图切换</td><td>Pre-prepare/Prepare/Commit 三阶段</td></tr>
+            <tr data-theme="security"><td><strong>AWS Lambda 容器加载</strong></td><td>无服务器冷启动太慢</td><td>—（工程实践）</td><td>—（工程实践）</td><td>缓存 + 按需分块加载</td><td>用工作集分块把冷启动从秒级压到毫秒级</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 板块一：计算框架 ============ -->
+    <h2 style="margin-top:52px">① 计算框架：把"并行"藏进简单的接口里</h2>
+    <p style="color:var(--text-2)">这一类论文的共同目标是：让<b>不懂分布式的人也能用上几千台机器</b>。做法都是"用一层抽象把复杂性吃掉"。</p>
+
+    <!-- MapReduce -->
+    <article class="paper" id="mapreduce">
+      <div class="paper-head">
+        <div class="paper-num">01</div>
+        <div class="meta">
+          <h3>MapReduce: Simplified Data Processing on Large Clusters</h3>
+          <div class="sub">Jeffrey Dean, Sanjay Ghemawat · OSDI 2004</div>
+          <div class="tags"><span class="tag tag-indigo">计算框架</span><span class="tag tag-gray">Lab 1</span><span class="tag tag-green">奠基之作</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>把"在几千台机器上处理 TB 级数据"这件事，压缩成程序员只需写两个纯函数：<code>Map(k1,v1) → list(k2,v2)</code> 和
+           <code>Reduce(k2, list(v2)) → list(v2)</code>。剩下的一切——任务切分、调度、数据搬运（shuffle）、负载均衡、故障恢复——
+           全部由框架自动完成，程序员完全不用管。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与后来者的最大差异在于<b>它把应用限制得极死</b>：只能有一种计算模式（Map → Shuffle → Reduce），任务之间不能交互、不能有状态、只能是批处理。
+           正是这种"自我设限"换来了极致的简单与容错能力。对比 <a href="#ray">Ray</a>——Ray 恰恰是为了打破这些限制（支持细粒度、有状态、低延迟）而设计的。
+           与 <a href="#gfs">GFS</a> 的关系则是"上下层"：MapReduce 把中间数据放在本地磁盘、输入输出放在 GFS 上。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：容错为什么这么简单？</div>
+        <p>这是 MapReduce 最精妙的地方。它的容错策略是<b>直接重跑失败的任务</b>，而不是像数据库那样做日志恢复。这能成立，依赖于两个前提：</p>
+        <ul>
+          <li><b>Map/Reduce 必须是确定性纯函数</b>——只依赖输入、不读写外部状态、不用随机数。这样无论重跑几次，同一个 Map 任务的中间输出都完全一致。</li>
+          <li><b>输出用"临时文件 + 原子重命名"</b>。任务写到临时文件，全部写完才原子改名。于是即使两个 Worker 同时执行同一个任务，读者也只会看到一个完整文件，绝不会看到写了一半的内容。</li>
+        </ul>
+        <p>另一个漂亮的设计是<b>任务数远多于机器数</b>：把输入切成很多小分片（远多于 Worker 数量），谁先做完谁领新任务。
+           这样快机器自然多做，慢机器少做，负载自动均衡；同时还能对付"掉队者"（straggler）——对最后几个慢任务启动<b>备份执行</b>，谁先完成用谁的结果。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>为了容错，它<b>放弃了状态与交互</b>；为了简化，它<b>放弃了实时性</b>（只能是批处理）；它甚至<b>放弃了通用性</b>。
+           但它换来了"一个只会写单机代码的程序员，也能用上 1800 台机器"的可用性——这在 2004 年是革命性的。
+           论文的经典结论：网络带宽才是瓶颈（而非 CPU/磁盘），因此要尽量让 Map 在数据所在的机器上本地运行，中间数据只过网络一次。</p>
+        <div class="note-box nb-info"><span class="nb-ic">🧪</span><div><p><strong>对应 Lab：</strong><a href="labs.html#lab1">Lab 1</a> 就是亲手实现一个分布式 MapReduce——一个 coordinator + 若干 worker，通过 RPC 通信，并处理 worker 崩溃。你会亲眼看到"确定性纯函数"和"原子重命名"为什么是必需的。</p></div></div>
+      </div>
+    </article>
+
+    <!-- Ray -->
+    <article class="paper" id="ray">
+      <div class="paper-head">
+        <div class="paper-num">02</div>
+        <div class="meta">
+          <h3>Ray: A Distributed Framework for Emerging AI Applications</h3>
+          <div class="sub">Stephanie Wang et al. · NSDI 2021（讲的是其中的 Ownership 机制）</div>
+          <div class="tags"><span class="tag tag-indigo">计算框架</span><span class="tag tag-sky">现代演进</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>MapReduce/Spark 假设任务是"粗粒度、无状态、批处理"的，但现代 AI 应用需要<b>细粒度、有状态、低延迟</b>的任务。
+           Ray 用三个概念解决它：<b>Future（未来值）</b>——异步调用返回一个句柄，稍后再取值；
+           <b>Actor（角色）</b>——在多次调用之间保持状态的对象；<b>所有权（Ownership）</b>——把关于 Future 的元数据按"谁创建谁拥有"分散到各节点。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>对比 MapReduce 的"集中式 Coordinator"，Ray 发现<b>中心协调器会成为瓶颈</b>：每个 Future 的调用和取值都要往返协调器一次，而 Future 可能只运行几毫秒。
+           Ray 的解法是<b>把元数据表按所有权分片</b>——任务 A 创建的 Future 由 A 所在节点负责记账，于是 A 可以在<b>完全不与 B 通信</b>的情况下把 Future 引用传给 C。
+           另一个关键差异是故障模型：MapReduce 靠"确定性 + 重跑"，Ray 则靠<b>血缘重建（lineage reconstruction）</b>加上<b>命运共享（fate sharing）</b>。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：命运共享（Fate Sharing）</div>
+        <p>分布式系统里最棘手的是"悬空引用"。假设 worker 1 拥有对象 x，worker 2 拥有对象 y（y 依赖 x），worker 3 借用了 x。
+           如果 worker 1 和 2 都崩了，worker 3 手里的 x 引用将<b>永远无法被解析成值</b>——它会一直等下去。</p>
+        <p>Ray 的答案很干脆：<b>worker 3 主动"假装自己也崩了"，终止自己</b>。这样上层调用者会重新提交整个计算，一切从头来过。
+           这个"谁拥有，谁崩溃，借的人跟着一起死"的规则，就是命运共享——用"一起失败"换取了引用永远不会悬空。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>Ray 用<b>更复杂的恢复逻辑</b>（血缘重建 + 命运共享）换来了<b>更低的延迟和更强的表达能力</b>。
+           这与 MapReduce 形成鲜明对照：一个是"把限制做到极致以换取简单"，一个是"接受复杂以突破限制"。理解这一对，就理解了计算框架十几年的演进主线。</p>
+      </div>
+    </article>
+
+    <!-- Go -->
+    <article class="paper" id="go">
+      <div class="paper-head">
+        <div class="paper-num">03</div>
+        <div class="meta">
+          <h3>The Go Programming Language and Environment</h3>
+          <div class="sub">Russ Cox et al. · CACM 2022（配合 LEC 2 的 RPC/Threads 与 LEC 5 的 Go Patterns）</div>
+          <div class="tags"><span class="tag tag-indigo">工程基础</span><span class="tag tag-gray">Lab 通用</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>Go 被设计成"<b>为并发而生的系统语言</b>"。它把三件事组合得天衣无缝：<b>轻量级线程（goroutine）</b>、
+           <b>类型安全的通道（channel）</b>、<b>垃圾回收（GC）</b>。GC 让"多线程 + 手动内存管理"这个地狱级组合变得可控——
+           这在分布式系统里尤其关键，因为你会大量创建/销毁线程与数据结构。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>它不是算法论文，而是<b>工程工具论文</b>。它解释了"为什么 6.824 选 Go 而不是 C++/Java/Python"：
+           内置的 RPC 库让客户端/服务器通信只需几行代码；<code>go test -race</code> 能自动检测数据竞争（这是 Lab 里最救命的功能）；
+           单文件可执行、编译快，让"改一行、跑一次测试"的循环非常顺畅。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>Go 故意<b>不做</b>很多花哨特性（没有泛型继承、没有异常），换来了"新人一天上手、代码十年可读"。
+           对分布式系统来说，<b>可读性与并发安全</b>比语言表现力更重要——因为你会花大量时间盯着并发代码找 bug。</p>
+        <div class="note-box nb-tip"><span class="nb-ic">🐹</span><div><p><strong>零基础必看：</strong>本站 <a href="labs.html#go">Lab 通关手册 · Go 开发范式</a> 一节，把这些语言特性对应到 Lab 里的具体用法，是最快的上手路径。</p></div></div>
+      </div>
+    </article>
+
+    <!-- ============ 板块二：存储与缓存 ============ -->
+    <h2 style="margin-top:52px">② 存储与缓存：容量、吞吐与"够用就好的一致性"</h2>
+    <p style="color:var(--text-2)">这一类论文的核心矛盾是：<b>要装下海量数据、要扛住海量请求，就只能放弃严格一致性</b>。它们教你如何在"够用"与"正确"之间划线。</p>
+
+    <!-- GFS -->
+    <article class="paper" id="gfs">
+      <div class="paper-head">
+        <div class="paper-num">04</div>
+        <div class="meta">
+          <h3>The Google File System</h3>
+          <div class="sub">Sanjay Ghemawat, Howard Gobioff, Shun-Tak Leung · SOSP 2003</div>
+          <div class="tags"><span class="tag tag-sky">分布式存储</span><span class="tag tag-amber">弱一致性</span><span class="tag tag-green">工业经典</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>为 Google 内部的大批量数据（MapReduce 的输入输出、爬虫、索引）设计一个"<b>又大又快的集群文件系统</b>"。三个支柱：
+           <b>① 超大块（64MB Chunk）</b>，把元数据量压到最低；<b>② 单 Master 管元数据、Chunkserver 管数据</b>，让客户端直接和 Chunkserver 传数据，Master 不成为带宽瓶颈；
+           <b>③ 每个 Chunk 三副本 + 主副本（Primary）定序</b>，用主副本给并发写排序。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与 <a href="#raft">Raft</a>/<a href="#paxos">Paxos</a> 的根本差异是：<b>GFS 放弃了强一致性</b>。
+           Raft 用多数派保证"任何时刻所有读者看到相同的值"，而 GFS 只承诺"如果一个写成功且没有并发写，那么所有读者都能看到"——
+           一旦发生并发写或失败，不同副本可能返回不同内容（论文称之为"不一致"）。这不是缺陷，而是<b>深思熟虑的取舍</b>：
+           它面向的是"追加日志、单写者为主"的批处理场景，应用自己（比如带上校验和与记录 ID）能容忍这些异常。
+           与 <a href="#zookeeper">ZooKeeper</a> 的差异则是"大文件系统"vs"小元数据协调"。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：租约（Lease）如何避免脑裂</div>
+        <p>GFS 最危险的情况是<b>同时出现两个主副本</b>（split brain）：客户端 A 写到旧主副本，客户端 B 从新主副本读，B 就看不到 A 的写入，系统彻底错乱。</p>
+        <p>但 Master 无法区分"主副本崩了"和"网络断了"——两者都表现为"收不到响应"。GFS 的解法是<b>租约</b>：
+           Master 授予主副本一段时间的"主权限"（默认 60 秒），主副本<b>承诺在租约到期前停止当主副本</b>，Master 则<b>承诺在租约到期前不指派新主副本</b>。
+           这样只要双方都守约，就绝不会出现两个主副本。这是分布式系统里"用时间换安全"的经典手法，
+           后面 Spanner 的 TrueTime、ZooKeeper 的会话超时，本质上是同一类思路的变体。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>GFS 的选择是：<b>为吞吐量牺牲一致性、为简单牺牲自动故障转移</b>。论文坦诚地承认单 Master 会耗尽内存和 CPU，
+           事后 Google 工程师也反思"也许当初应该把一致性做得更强"。但作为 2003 年的工程产物，它用最简单的方式支撑了 Google 全公司的数据基础设施。
+           后续的 Colossus、BigTable 都是它的进化版。</p>
+        <div class="note-box nb-warn"><span class="nb-ic">⚠️</span><div><p><strong>易混淆点：</strong>GFS 里的 "Master" 与 Raft 里的 "Leader" 不同。GFS 的 Master 负责<b>元数据</b>而非数据本身，且是<b>单点</b>（论文没给出自动选主方案）；Raft 的 Leader 是<b>动态选举</b>出来的，且参与数据复制。</p></div></div>
+      </div>
+    </article>
+
+    <!-- Memcached -->
+    <article class="paper" id="memcached">
+      <div class="paper-head">
+        <div class="paper-num">05</div>
+        <div class="meta">
+          <h3>Scaling Memcache at Facebook</h3>
+          <div class="sub">Nishtala et al. · NSDI 2013</div>
+          <div class="tags"><span class="tag tag-sky">缓存</span><span class="tag tag-amber">最终一致</span><span class="tag tag-purple">经验论文</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>这不是"新算法"论文，而是一篇<b>经验论文</b>：讲述 Facebook 如何用一个简单的内存 KV 缓存（memcached），
+           扛住"每秒数十亿次存储操作"的负载。核心洞察是：<b>缓存的真正价值不是降低延迟，而是保护数据库不被读请求压垮</b>——
+           99% 的命中率意味着数据库读负载降低 100 倍；但命中率只要掉 1%，数据库负载就会<b>翻倍</b>。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与 <a href="#spanner">Spanner</a> 追求的"强一致全球事务"完全相反，Facebook 明确<b>接受最终一致</b>：
+           用户晚几秒看到一条点赞，几乎无人察觉。这是"用户视角的一致性"（别太旧就行），而非"正确性保证"。
+           与 <a href="#gfs">GFS</a> 的相似之处在于"都是为特定应用量身定做的弱一致系统"，但 Memcached 更极端——它连持久化都没有。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：两个精妙的小设计</div>
+        <p><b>① 写用 delete 而非 update。</b>如果两个客户端并发写同一个 key，它们的更新到达数据库的顺序可能和到达缓存的顺序相反，导致缓存里<b>永久残留错误值</b>。
+           而 delete 是对称的——无论谁先谁后，最终结果都是"缓存里没有"，下次读自然会从数据库刷新。这是一个"用更弱的操作换来顺序无关性"的绝佳例子。</p>
+        <p><b>② 租约（Lease）解决"惊群"与"陈旧写回"。</b>当某个 key 缓存失效时，大量客户端会同时去数据库拉数据（惊群 thundering herd）。
+           memcached 的解法是：只给<b>第一个</b>未命中的客户端发放一张"租约"（允许它去数据库刷新并回填），其余客户端被告知"稍等几毫秒重试"。
+           更妙的是，如果此时有别的客户端写入并 delete 了该 key，租约会被作废，那个"迟到的回填"就会被丢弃，避免把陈旧值写回缓存。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>它放弃了强一致性、放弃了持久性、放弃了通用的正确性保证，换来了"用廉价内存挡住天量读请求"的极致性价比。
+           论文的结论很有启发：<b>线性一致太强、最终一致又太弱</b>——真实系统需要的是介于两者之间的、可精细调节的中间地带。</p>
+      </div>
+    </article>
+
+    <!-- ============ 板块三：复制与共识 ============ -->
+    <h2 style="margin-top:52px">③ 复制与共识：让一群机器"像一个整体"</h2>
+    <p style="color:var(--text-2)">这是全课最核心、也最难的部分。核心问题只有一个：<b>在机器会坏、网络会断的情况下，如何让所有副本就"发生了什么"达成一致？</b></p>
+
+    <!-- Paxos -->
+    <article class="paper" id="paxos">
+      <div class="paper-head">
+        <div class="paper-num">06</div>
+        <div class="meta">
+          <h3>Paxos Made Simple</h3>
+          <div class="sub">Leslie Lamport · 2001</div>
+          <div class="tags"><span class="tag tag-teal">共识</span><span class="tag tag-green">理论奠基</span><span class="tag tag-red">抽象难懂</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>解决"<b>一组机器就单个值达成一致</b>"这个最基础的问题。它用 <b>Quorum（多数派）</b>做基石：
+           任何决定都需要多数派同意，而<b>任意两个多数派必然有交集</b>，这个交集保证了"一旦某个值被选定，后续任何多数派都会知道它"，
+           于是系统永远不会改变主意（不会脑裂）。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与 <a href="#raft">Raft</a> 的差异在于<b>结构与可理解性</b>：Paxos 没有领导者，任何节点都能提议，
+           协议允许"活锁"（两个提议者互相打断，谁也提不出结果）；Raft 则强制"同一时刻只有一个领导者"，
+           用领导者简化了所有推理。与 <a href="#cr">链式复制</a> 的差异在于容错模型：Paxos 容忍 f 个故障需要 2f+1 台（多数派），
+           链式复制容忍 N-1 个故障只需 N 台——但代价是链式复制必须等所有副本都写完。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：两阶段与"必须保守"的哲学</div>
+        <p>Paxos 的每一轮有两个阶段：<b>Prepare</b>（提议者问"有没有人已经接受过什么？"）和 <b>Accept</b>（提议者说"那就定这个值吧"）。</p>
+        <p>最深刻的一点是：<b>如果提议者看到"可能已经达成过一致"的证据，就必须当作已经达成来处理</b>。
+           因为提议者的多数派可能只和上一轮的多数派重叠<b>一个</b>节点，它无法确知上一轮是否成功——但只要有一丝可能，
+           就必须沿用上一轮的值，而不能自作主张换一个新值。这条"保守原则"是 Paxos 正确性的灵魂。</p>
+        <p>另一个关键细节：接受者必须<b>持久化</b>它见过的最小提议编号（n_p）和已接受的值。为什么？
+           假设某个接受者在投出"接受 X"的票后就崩溃重启，而它恰好是两轮多数派唯一的交集——
+           如果它忘了 X，新一轮就会错误地选定另一个值，破坏一致性。<b>"忘了就等于没参与过"</b>，这是 Paxos 对持久化的硬性要求。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>Paxos 追求的是<b>理论上的最小性与正确性</b>，代价是抽象、难懂、只解决"单个值"的一致（真实系统需要一连串 Paxos 实例，即 Multi-Paxos）。
+           它真正的价值在于：几乎所有现代共识协议（Raft、ZAB、Spanner 的 Paxos 组）都是它的变体或再包装。</p>
+        <div class="note-box nb-key"><span class="nb-ic">🧠</span><div><p><strong>一句话记住 Paxos：</strong>多数派投票 + 任意两个多数派必有交集 + 见到"可能已选定"就保守沿用。</p></div></div>
+      </div>
+    </article>
+
+    <!-- Raft -->
+    <article class="paper" id="raft">
+      <div class="paper-head">
+        <div class="paper-num">07</div>
+        <div class="meta">
+          <h3>In Search of an Understandable Consensus Algorithm (Raft)</h3>
+          <div class="sub">Diego Ongaro, John Ousterhout · USENIX ATC 2014</div>
+          <div class="tags"><span class="tag tag-teal">共识</span><span class="tag tag-indigo">Lab 3 &amp; 4</span><span class="tag tag-green">最常用</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>Raft 的目标不是"更强"，而是"<b>可理解（understandability）</b>"——这是一个明确的、第一优先级的设计目标。
+           它把共识拆成三个相对独立、可分别理解的部分：<b>① 领导者选举</b>（Leader Election）、<b>② 日志复制</b>（Log Replication）、
+           <b>③ 安全性</b>（Safety）。核心机制是：强领导者 + 日志 + 多数派提交。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>对比 <a href="#paxos">Paxos</a>：Raft 用"<b>强领导者</b>"消除了 Paxos 的活锁问题——日志只能由领导者按顺序追加，
+           追随者只能被动接受，推理简单得多。它还引入<b>任期（Term）</b>这个逻辑时钟来区分新旧领导者。
+           对比 <a href="#cr">链式复制</a>：Raft 容忍 f 个故障只需 2f+1 台中的多数派，而链式复制需要几乎所有副本存活——
+           Raft 对"少数派变慢/失联"更宽容。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：三个最精妙的机制</div>
+        <p><b>① 随机化选举超时。</b>如果所有节点的超时时间相同，它们会同时发起选举、同时给自己投票，结果谁也拿不到多数派（选票分裂）。
+           Raft 的解法是给每个节点的选举超时加一个<b>随机抖动</b>——总有一个节点最先超时、先发起选举，抢在别人之前拿到多数派。</p>
+        <p><b>② 选举限制（Election Restriction）。</b>这是保证"已提交的日志不会丢失"的关键。规则是：候选人只有在
+           "<b>日志至少和投票者一样新</b>"（最后一条日志的任期更高，或任期相同但更长）时才能获得投票。
+           这样选出的新领导者必然拥有所有可能已提交的日志，绝不会回滚已提交的操作。</p>
+        <p><b>③ 提交规则与 Figure 8。</b>领导者<b>不能</b>直接通过"某条旧任期的日志被复制到多数派"就判定它已提交。
+           原因是：旧任期的条目可能被复制到多数派、看似安全，但随后被新领导者覆盖。Raft 规定：
+           领导者只有在<b>自己当前任期</b>的某条日志被复制到多数派后，才能（连带把之前所有条目）标记为已提交。这个细节是 3C 测试的重点。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>Raft 用"强领导者"换来了可理解性，但也因此<b>把所有写入压力集中在领导者</b>上（读可以从追随者走，但写必须过领导者）。
+           它放弃了 Paxos 的"无领导者"灵活性，换来了工程上的巨大成功：etcd、Consul、CockroachDB、TiKV 都基于 Raft。
+           这印证了一个重要观点：<b>在工程世界里，"能被正确实现"比"理论上最优"更重要</b>。</p>
+        <div class="note-box nb-info"><span class="nb-ic">🧪</span><div><p><strong>对应 Lab：</strong><a href="labs.html#lab3">Lab 3</a> 分 3A（选举）/3B（日志）/3C（持久化）/3D（快照）四部分实现 Raft。建议对照论文的 Figure 2（那张"状态 + 规则"总表）逐条实现。</p></div></div>
+      </div>
+    </article>
+
+    <!-- Chain Replication -->
+    <article class="paper" id="cr">
+      <div class="paper-head">
+        <div class="paper-num">08</div>
+        <div class="meta">
+          <h3>Chain Replication for Supporting High Throughput and Availability</h3>
+          <div class="sub">Robbert van Renesse, Fred B. Schneider · OSDI 2004</div>
+          <div class="tags"><span class="tag tag-teal">复制</span><span class="tag tag-purple">架构特色</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>把副本排成一条<b>链</b>：写请求只发给<b>链头（Head）</b>，链头按序沿链一路转发到<b>链尾（Tail）</b>，
+           链尾确认后才回复客户端；<b>读请求只发给链尾</b>。关键在于"读写分离"——链头只管写、链尾只管读，中间节点只做转发，
+           于是<b>客户端交互的负载被分散到链的两端</b>，而不是像主备复制那样全压在一个主节点上。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>对比主备（Primary/Backup）复制：主备的主节点要做所有事（定序、转发、回复读），是天然瓶颈；链式复制把它拆开了。
+           对比 <a href="#raft">Raft</a>：链式复制用 N 台机器能容忍 N-1 台故障（因为"写全"而非"写多数派"），
+           而 Raft 只能容忍少数派故障——但链式复制必须等<b>所有</b>副本确认，只要有一个副本慢，整体就慢。
+           这是"可用性"与"对慢节点容忍度"之间的经典权衡。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：为什么读只能从链尾读？</div>
+        <p>这是全篇的核心。一个更新沿链前进时，链上各节点的状态是"<b>前面新、后面旧</b>"的。如果允许从中间节点读，
+           就可能读到"还没走完全链"的更新。更危险的是：如果链头刚收到更新就回复客户端"成功了"，但链还没走完就发生了故障，
+           这个更新可能丢失——客户端却以为它成功了。</p>
+        <p>因此规则必须严格：<b>更新只有到达链尾才算"提交"</b>，因为到达链尾意味着<b>链上每个节点都已经拥有它</b>，
+           之后无论哪个节点故障，更新都不会消失。读只在链尾进行，读到的就一定是已提交的、稳定的值。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>链式复制需要额外的<b>配置服务（CFG）</b>来管理链的成员和故障切换（谁当新链头、谁当新链尾），
+           而 Raft 是"自包含"的。它在大数据块场景（如 GFS）下很有优势，因为链头不用像主节点那样向所有备份广播、
+           省下了大量网络带宽。它也带来一个漂亮的性质：故障恢复时，新链头只需和下游"对一下账"，
+           把对方缺的最后几条更新补上即可——因为链的<b>顺序交付</b>保证了相邻节点只差"最后几条"。</p>
+      </div>
+    </article>
+
+    <!-- ZooKeeper -->
+    <article class="paper" id="zookeeper">
+      <div class="paper-head">
+        <div class="paper-num">09</div>
+        <div class="meta">
+          <h3>ZooKeeper: Wait-free Coordination for Internet-scale Systems</h3>
+          <div class="sub">Patrick Hunt, Mahadev Konar, Flavio Junqueira, Benjamin Reed · USENIX ATC 2010</div>
+          <div class="tags"><span class="tag tag-teal">协调服务</span><span class="tag tag-sky">实用</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>它想解决一个很实际的痛点：<b>直接用 Raft/Paxos 构建应用太难了</b>——你得把所有逻辑改写成"事件 → 提交 → 执行"的状态机模式。
+           ZooKeeper 提供的是一个"<b>带故障容错的存储原语</b>"：一个类似文件系统的 znode 树，你像写普通代码一样读写它，
+           故障时换个新服务器从 ZK 读回状态即可。<b>它复制的是"状态"，而不是"计算"</b>。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与 <a href="#raft">Raft</a> 的差异在于<b>抽象层次</b>：Raft 是"共识库"，ZooKeeper 是"协调服务"。
+           与 <a href="#gfs">GFS</a> 的差异在于<b>数据规模</b>：ZK 的数据必须全部放进内存，只能存元数据（配置、成员列表、锁状态），
+           大文件放 GFS。另一个关键差异是<b>读的一致性</b>：ZK 的写是线性一致的（走 Leader），但读可以由任意 Follower 本地完成，
+           因此读可能是<b>旧的</b>——它只保证"客户端 FIFO"（一个客户端不会读到比自己更旧的写）和"所有客户端看到相同的写顺序"。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：临时节点与 Fencing</div>
+        <p>ZooKeeper 用来做"选主/加锁"的杀手锏是<b>临时节点（ephemeral znode）</b>：客户端创建一个临时节点表示"我是领导者"，
+           并周期性发送心跳。一旦客户端崩溃（心跳停止），ZK 超时后<b>自动删除</b>它的临时节点，于是别的客户端可以重新竞选。</p>
+        <p>但这里有个致命的细节：如果旧领导者只是"网络卡了"、其实还活着，它会以为自己还是领导者！
+           ZK 的防护是<b>原子地做两件事</b>：删除临时节点 + <b>终止该会话</b>（拒绝它的所有后续请求）。
+           这样旧领导者一旦尝试访问 ZK，就会收到异常，从而意识到"我已经不是领导者了"。这种"忽略被判定为死亡的客户端的请求"的机制，
+           就叫 <b>Fencing（围栏）</b>。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>ZK 牺牲了"读的线性一致性"来换取读的<b>高吞吐与低延迟</b>（读可以任意 Follower 本地完成，不打 Leader）。
+           它也用"数据必须放进内存"换来了极快的读速度。对"配置管理、服务发现、选主"这类读多写少的场景，这个取舍非常划算。</p>
+      </div>
+    </article>
+
+    <!-- ============ 板块四：一致性与事务 ============ -->
+    <h2 style="margin-top:52px">④ 一致性与事务：从"单个操作"到"一组操作"</h2>
+    <p style="color:var(--text-2)">前面解决的是"一个操作如何被正确地复制"，这里要解决"<b>如何定义正确</b>"，以及"<b>跨多台机器的一组操作如何原子地完成</b>"。</p>
+
+    <!-- Linearizability -->
+    <article class="paper" id="linearizability">
+      <div class="paper-head">
+        <div class="paper-num">10</div>
+        <div class="meta">
+          <h3>Linearizability: A Correctness Condition for Concurrent Objects</h3>
+          <div class="sub">Maurice Herlihy, Jeannette Wing · TOPLAS 1990（课程只读到第 3.1 节）</div>
+          <div class="tags"><span class="tag tag-indigo">一致性理论</span><span class="tag tag-green">Lab 2 &amp; 4</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>给"强一致"一个精确的数学定义。核心概念是<b>线性化点（linearization point）</b>：
+           一段并发执行的历史是"线性一致"的，当且仅当<b>你能为每个操作在它的开始与结束之间找到一个时间点</b>，
+           使得按这些点的顺序<b>串行执行</b>的结果，与观察到的返回结果完全一致。也就是说：并发系统看起来必须像"一台服务器一次处理一个请求"。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>它不是系统论文，而是<b>规范论文</b>——它定义了"正确"这个词本身。它与 <a href="#zookeeper">ZooKeeper</a>、<a href="#gfs">GFS</a> 等"弱一致系统"的关系是"标尺与对象"：
+           有了线性一致性的定义，才能精确地说"GFS 不是线性一致的"、"ZooKeeper 的读不是线性一致的"。
+           与"可串行化（serializability）"的差异：线性一致性管的是<b>单个对象上的单个操作</b>，可串行化管的是<b>跨对象的事务</b>。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：它排除了哪些"反常"</div>
+        <p>线性一致性用几条简单规则，排除了一大堆危险行为：</p>
+        <ul>
+          <li><b>排除过期读：</b>如果一个写已经完成，之后开始的读必须看到它。这直接禁止了"从落后副本读"和"读旧缓存"。</li>
+          <li><b>排除脑裂：</b>两个领导者各自接受写、各自对外回复，就会产生无法线性化的历史。</li>
+          <li><b>排除崩溃后遗忘：</b>已经回复给客户端的写，崩溃重启后不能消失。</li>
+          <li><b>排除重复执行：</b>网络重传导致同一个请求被执行两次，也可能产生非法的历史——所以 Lab 2 要求 Put 必须"至多一次"。</li>
+        </ul>
+        <p>但要特别注意：<b>线性一致性允许"多个结果都合法"</b>。比如并发的一次读和一次写，读可能读到旧值也可能读到新值——
+           只要能找到自洽的线性化点即可。它约束的是"结果的集合"，不是"唯一结果"。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>线性一致性是"黄金标准"，但也极其昂贵：跨洲的一个写后读，必须等"值传播到对方"，受光速限制，
+           跨美国东西海岸的串行吞吐量可能只有每秒几十次。因此真实系统常在它和性能之间做取舍——
+           这正是后面 Spanner、FaRM、Memcached 各自给出不同答案的原因。</p>
+        <div class="note-box nb-key"><span class="nb-ic">🎮</span><div><p><strong>动手试试：</strong>去 <a href="notes.html#linz">可视化笔记的线性一致性检查器</a>，亲手判断几段历史是否线性一致，比读十遍定义都管用。</p></div></div>
+      </div>
+    </article>
+
+    <!-- 2PC -->
+    <article class="paper" id="twopc">
+      <div class="paper-head">
+        <div class="paper-num">11</div>
+        <div class="meta">
+          <h3>Distributed Transactions（6.033 Chapter 9 节选）</h3>
+          <div class="sub">Saltzer &amp; Kaashoek · 读 9.1.5/9.1.6/9.5.2/9.5.3/9.6.3</div>
+          <div class="tags"><span class="tag tag-amber">事务</span><span class="tag tag-purple">原子提交</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>事务由两部分组成：<b>并发控制</b>（保证隔离性/可串行化，用两阶段锁 2PL）+ <b>原子提交</b>（保证原子性，用两阶段提交 2PC）。
+           2PC 的流程是：协调者先问所有参与者"能不能提交？"（Prepare），全部回答"能"之后才广播"提交"（Commit），
+           只要有一个人说"不能"，就全体回滚。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与 <a href="#raft">Raft</a> 解决的是<b>完全不同的问题</b>，这点极其重要：
+           <b>Raft 让多台机器做"同一件事"（复制），只需要多数派活着；2PC 让多台机器做"不同的事"（各改自己那片数据），必须所有人都在。</b>
+           因此 Raft 提升的是<b>可用性</b>，2PC 提升的是<b>原子性</b>。想同时要两者？那就是 <a href="#spanner">Spanner</a> 的做法——用 Paxos 复制每个参与者，再在复制组之上跑 2PC。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：为什么参与者必须"阻塞"？</div>
+        <p>2PC 最反直觉的地方：一个参与者投了"YES"之后，如果迟迟收不到协调者的最终决定，它<b>既不能擅自提交、也不能擅自回滚</b>，
+           只能<b>抱着锁一直等</b>（阻塞）。为什么？</p>
+        <p>因为它无法区分两种情况：协调者可能已经决定"提交"，并且已经把"提交"发给了<b>别的</b>参与者（那个参与者会提交）；
+           也可能协调者其实决定了"回滚"。如果它擅自回滚，就会出现"一个人提交、一个人回滚"——原子性被破坏。
+           所以它只能等协调者恢复后告诉它答案。<b>这就是 2PC 最著名的缺陷：协调者崩溃会导致参与者无限期阻塞，且锁被一直持有。</b></p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>2PC 用"阻塞风险"换来了"原子性"。它慢（多轮消息 + 磁盘写入），而且持有锁跨越了 prepare/commit 的整个交换过程。
+           因此现实中它通常只用在<b>单个小范围</b>内（比如同一个数据中心），而不会跨银行、跨航空公司使用。
+           要消除阻塞，就得让协调者本身也具备容错能力——这正是 Spanner 的思路。</p>
+      </div>
+    </article>
+
+    <!-- Spanner -->
+    <article class="paper" id="spanner">
+      <div class="paper-head">
+        <div class="paper-num">12</div>
+        <div class="meta">
+          <h3>Spanner: Google's Globally-Distributed Database</h3>
+          <div class="sub">James C. Corbett et al. · OSDI 2012</div>
+          <div class="tags"><span class="tag tag-amber">全球事务</span><span class="tag tag-purple">架构特色</span><span class="tag tag-green">里程碑</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>在<b>跨数据中心</b>的规模上同时做到：同步复制、跨分片事务、外部一致性（≈线性一致），还要自动重新分片。
+           它的配方是：<b>① 每个分片用 Paxos 复制</b>（保证高可用）；<b>② 跨分片事务用 2PC over Paxos</b>（消除 2PC 协调者单点）；
+           <b>③ 只读事务用快照隔离，不加锁</b>；<b>④ 用 TrueTime 给事务打全局有序的时间戳</b>。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>对比 <a href="#farm">FaRM</a>：Spanner 面向<b>地理分布</b>，用 TrueTime 与 Paxos 对抗高延迟，单事务耗时 10~100ms；
+           FaRM 面向<b>单个数据中心</b>，用 RDMA 与内存对抗 CPU 开销，单事务只需几十微秒。两者都"分片 + 复制 + 2PC"，
+           但优化目标截然不同——一个优化"距离"，一个优化"开销"。
+           对比 <a href="#twopc">纯 2PC</a>：Spanner 的协调者和参与者都是 Paxos 组，所以不再有"协调者崩溃导致无限阻塞"的问题。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：TrueTime 与"提交等待"</div>
+        <p>Spanner 最著名的创新是 <b>TrueTime</b>：它不假装时钟是准的，而是<b>诚实地返回一个不确定区间</b>
+           <code>[earliest, latest]</code>，并保证真实时间一定落在这个区间内（通常宽度不到 1 毫秒）。</p>
+        <p>基于此，写事务用两条规则保证外部一致性：<b>① 起始规则</b>：事务的时间戳取 <code>TT.now().latest</code>；
+           <b>② 提交等待</b>：在释放锁、回复客户端之前，<b>一直等到 <code>TS &lt; TT.now().earliest</code></b>，
+           即确保"这个时间戳已经<b>确定成为过去</b>"。</p>
+        <p>为什么这样就能保证"T1 完成后开始的 T2 一定能看到 T1"？因为 T1 提交等待后，其时间戳 TS1 已确凿落在过去；
+           而 T2 开始时取的时间戳 TS2 落在未来；于是必然 TS2 &gt; TS1，T2 的快照读取就会包含 T1 的写。
+           <b>用"等待"把不确定的时间区间"抹平"，换取全局有序</b>——这是全篇最漂亮的思想。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>代价是显而易见的：写事务要"提交等待"（平均几毫秒），跨洲读写延迟高。但 Spanner 的工作负载中
+           <b>99.9% 是只读事务</b>，而只读事务可以走"本地副本 + 快照读 + 不加锁"，因此延迟比写低 10 倍。
+           这个设计精准地抓住了"绝大多数是读"的现实。它也证明了：<b>地理分布式事务在工程上是可行的</b>，这在 2012 年是惊人的结论。</p>
+        <div class="note-box nb-info"><span class="nb-ic">🌍</span><div><p><strong>现实影响：</strong>CockroachDB、TiDB、YugabyteDB 都借鉴了 Spanner 的思路。它也说明了一个重要道理——有时候"诚实地面对硬件的不确定性"（如 TrueTime 承认时钟不准）比"假装它很准"更有效。</p></div></div>
+      </div>
+    </article>
+
+    <!-- FaRM -->
+    <article class="paper" id="farm">
+      <div class="paper-head">
+        <div class="paper-num">13</div>
+        <div class="meta">
+          <h3>No compromises: distributed transactions with consistency, availability, and performance (FaRM)</h3>
+          <div class="sub">Aleksandar Dragojević et al. · NSDI 2015</div>
+          <div class="tags"><span class="tag tag-amber">事务</span><span class="tag tag-red">乐观并发</span><span class="tag tag-purple">硬件前沿</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>目标极其激进：<b>每秒数百万个分布式事务，单事务预算只有几十微秒</b>。为此它同时动用了三项"重型武器"：
+           <b>① 数据全部放内存 + 非易失内存（NVRAM）</b>（消除磁盘瓶颈）；<b>② 单侧 RDMA</b>（网卡直接读写远端内存，绕过远端 CPU）；
+           <b>③ 乐观并发控制（OCC）</b>（不加锁就能用单侧 RDMA 读）。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>对比 <a href="#twopc">2PC/2PL</a> 的<b>悲观</b>路线：FaRM 用<b>乐观</b>路线——先不加锁地读、把写缓存在本地，
+           提交时再"验证"有没有冲突。为什么？因为<b>只有不加锁，才能用单侧 RDMA 读</b>——而单侧 RDMA 是它性能的来源。
+           乐观并发在<b>冲突稀少</b>时远快于悲观锁，但冲突频繁时会大量回滚重试。
+           对比 <a href="#spanner">Spanner</a>：一个优化"距离"，一个优化"开销"（见上文）。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：LOCK / VALIDATE / COMMIT-BACKUP</div>
+        <p>FaRM 的提交协议里，<b>LOCK</b> 消息特别巧妙：它既是一条"请求锁"的 RPC，又同时是一条<b>预写日志（WAL）</b>——
+           它被 RDMA 追加到主副本的日志里，因此天然就是持久的。主副本收到后，用<b>原子比较交换（CAS）</b>一次性完成
+           "检查锁 + 检查版本号 + 加锁"三步（把锁标志位塞进版本号的高位）。</p>
+        <p><b>VALIDATE</b> 是一个针对"只读对象"的优化：只读对象不需要加锁，只需在提交前用单侧 RDMA 重新读一次它的版本号，
+           确认没有被别人改过即可——比"加锁 + 提交"轻得多。这就是经典的"<b>读集合验证</b>"（read-set validation）。</p>
+        <p>容错的关键在于<b>提交点</b>的选择：FaRM 规定，只有当 <code>COMMIT-PRIMARY</code> 被写入至少一个主副本的 NVRAM 日志后，
+           事务才算提交。因为此时即便"协调者 + 所有备份"全挂，这条日志也还在，恢复时能据此完成提交。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>FaRM 用"苛刻的硬件要求"（RDMA + NVRAM + 数据必须全内存）换来了 100 倍于 Spanner 的性能。
+           它不适合冲突频繁的负载，也做不到地理分布。但它证明了一个重要方向：<b>当硬件演进（RDMA 普及、持久内存降价）时，软件协议可以重新设计以榨取新硬件的性能</b>。</p>
+      </div>
+    </article>
+
+    <!-- ============ 板块五：验证与安全 ============ -->
+    <h2 style="margin-top:52px">⑤ 验证与安全：当"信任"本身成为问题</h2>
+    <p style="color:var(--text-2)">前面的论文都假设"机器会坏但会诚实执行代码"。这一板块挑战这个假设：<b>如何证明系统真的正确？服务器本身不可信怎么办？节点会作恶怎么办？</b></p>
+
+    <!-- IronFleet -->
+    <article class="paper" id="ironfleet">
+      <div class="paper-head">
+        <div class="paper-num">14</div>
+        <div class="meta">
+          <h3>IronFleet: Proving Practical Distributed Systems Correct</h3>
+          <div class="sub">Chris Hawblitzel et al. · SOSP 2015</div>
+          <div class="tags"><span class="tag tag-gray">形式化验证</span><span class="tag tag-purple">方法论</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>"我通过了所有测试，所以我写的 Raft 是对的"——论文开篇就否定了这个想法：<b>测试是不完备的</b>。
+           IronFleet 提出用<b>机器检查的形式化证明</b>来保证正确性：先写出系统的"规范（Specification）"，
+           再用数学证明"实现"满足"规范"，最后由一个可信的<b>证明检查器</b>验证这个证明。<b>规范 + 检查器</b>构成可信基（TCB），其余都不可信。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与其它所有论文的差异是<b>维度不同</b>：别的论文在讲"怎么造系统"，它在讲"怎么确信系统是对的"。
+           它引入的<b>分层精化（refinement）</b>思想，其实和我们读其他论文时的直觉一致：
+           把复杂的实现状态机，逐层精化到"稍简单的协议状态机"，再到"最简单的规范状态机"，
+           每一层都只关心"外部可见行为"的子集。证明的传递性让整条链成立。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：不变量与归纳法</div>
+        <p>分布式系统的证明靠<b>归纳不变量</b>：找一个在所有"原子步骤"后都成立的性质（比如 Raft 的"每个任期至多一个领导者"），
+           用它来证明精化关系。因为执行是"初始状态 + 一系列原子转移"，只要保证"初始成立"且"每一步都保持"，
+           就能推出"永远成立"——这正是归纳法。</p>
+        <p>论文还讨论了一个有趣的问题：<b>如果证明卡住了，是协议错了还是实现错了？</b>
+           答案是：如果你无法证明"实现 → 协议"，可能是实现有 bug；如果你无法证明"协议 → 规范"，可能是协议设计本身有缺陷。
+           证明过程本身就成了发现设计漏洞的工具。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>代价是<b>巨大的证明工作量</b>（论文报告了人月级别的投入），且当前方法有局限：不支持局部并发、不支持崩溃恢复、
+           没有经过验证的客户端库。但它改变了一个根本认知：<b>分布式系统的正确性，可以像数学定理一样被"证明"，而不只是被"测试"</b>。</p>
+      </div>
+    </article>
+
+    <!-- SUNDR -->
+    <article class="paper" id="sundr">
+      <div class="paper-head">
+        <div class="paper-num">15</div>
+        <div class="meta">
+          <h3>Secure Untrusted Data Repository (SUNDR)</h3>
+          <div class="sub">Jinyuan Li, Maxwell Krohn, David Mazières, Dennis Shasha · OSDI 2004（读到 3.3.2）</div>
+          <div class="tags"><span class="tag tag-red">安全</span><span class="tag tag-purple">架构特色</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>回答一个尖锐的问题：<b>如果存储服务器本身不可信（可能被入侵、被篡改），我们还能得到可信的存储吗？</b>
+           SUNDR 只追求<b>完整性（integrity）</b>而非保密性：用<b>密码学哈希</b>和<b>数字签名</b>，让客户端能验证拿到的数据确实是"正确的、最新的、未被篡改或隐藏的"。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与 <a href="#bitcoin">Bitcoin</a> 是一对"镜像"：两者都基于"签名日志 + 哈希链接"，都把<b>分叉（fork）</b>视为核心威胁。
+           区别在于：SUNDR 无法自动解决分叉，只能保证"<b>分叉一旦发生就无法愈合</b>"（分叉一致性）；而 Bitcoin 用<b>工作量证明</b>让分叉被自动收敛到最长链。
+           与 <a href="#zookeeper">ZooKeeper</a> 的差异则是"信任模型"：ZK 假设服务器诚实，SUNDR 假设服务器可能作恶。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：分叉一致性与版本向量</div>
+        <p>最朴素的方案是"每个操作都对整个文件系统签名"，这样能防篡改——但日志会无限增长。SUNDR 的优化是用<b>版本向量</b>：
+           每个用户的签名句柄里，记录"我在这次操作时看到的<b>每个其他用户的版本号</b>"。</p>
+        <p>这样服务器就无法"愈合分叉"了。假设服务器把用户 B 的更新对 C 隐藏了，于是 C 生成了一个"没见过 B 更新"的新版本。
+           之后服务器想再把 B 的更新拿给 C 看——但 C 的版本向量显示"我当时没看到 B 的版本"，而 B 的后续版本又会要求"看到 C 的新版本"，
+           两者的版本向量<b>无法排序</b>，客户端立刻就能检测出"有人在搞鬼"。于是分叉被永久暴露。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>SUNDR 允许"分叉攻击"存在，只是保证它<b>会被发现且无法掩盖</b>。这在理论上不是完美的一致性，但论文论证：
+           在"服务器完全不可信"的假设下，这已经是能做到的最好结果了。它展示了分布式系统里一个深刻的主题——
+           <b>当你无法信任任何单一实体时，你能获得的保证会是什么样的</b>。</p>
+      </div>
+    </article>
+
+    <!-- Bitcoin -->
+    <article class="paper" id="bitcoin">
+      <div class="paper-head">
+        <div class="paper-num">16</div>
+        <div class="meta">
+          <h3>Bitcoin: A Peer-to-Peer Electronic Cash System</h3>
+          <div class="sub">Satoshi Nakamoto · 2008</div>
+          <div class="tags"><span class="tag tag-red">去中心化</span><span class="tag tag-purple">架构特色</span><span class="tag tag-green">颠覆性</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>在一个<b>完全开放、成员匿名、无需许可</b>的网络里实现共识。核心问题是<b>双花（double spending）</b>：
+           同一枚币被花两次。Bitcoin 的解法是维护一份<b>公开的、全局一致的交易账本（区块链）</b>——
+           只要所有节点看到同一份账本、同一顺序，双花就会立刻暴露。而"谁来产生账本的新块"，用<b>工作量证明（PoW）</b>来决定。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与 <a href="#raft">Raft</a>/<a href="#paxos">Paxos</a> 的根本差异在于<b>身份假设</b>：Paxos/Raft 假设你知道有 N 个节点（可数、固定、多数派可定义），
+           Bitcoin <b>完全不知道有多少参与者、也不知道是谁</b>。于是它用"算力"替代"投票数"：算力占多数的诚实节点会共同维护最长链。
+           与 <a href="#sundr">SUNDR</a> 的差异在于"分叉处理"：SUNDR 只能检测分叉，Bitcoin 能自动收敛分叉。
+           与 <a href="#bft">PBFT</a> 的差异在于"故障数量模型"：PBFT 假设恶意节点 < 1/3，Bitcoin 用经济学激励假设诚实算力占多数。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：挖矿为什么能解决分叉？</div>
+        <p>两个矿工几乎同时算出合法区块，链就会临时分叉。Bitcoin 的规则是"<b>最长链胜出</b>"，
+           而"最长"是由算力自然决定的：多数矿工会先看到某一条分叉并在它上面继续挖，于是它更快变长，
+           少数派看到更长的链后会"倒戈"切换到长链。<b>算力投票天然地让共识不断被重新强化</b>。</p>
+        <p>挖矿（寻找满足"哈希前 N 位为零"的随机数）的意义在于：<b>让"延长链"这件事需要真实的、可验证的代价</b>。
+           攻击者想从旧区块分叉出更长链，就必须比全网其他所有人加起来更快地挖——这就是著名的"<b>51% 攻击</b>"门槛。
+           更妙的是，这套机制<b>不需要知道参与者身份、甚至不需要知道参与者数量</b>，用随机性实现了"按算力加权的抽签"。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>代价巨大：<b>耗电惊人</b>、交易确认慢（10 分钟起步，高价值需等 6 个块 ≈ 1 小时）、吞吐极低（约 5 笔/秒，信用卡是 5000 笔/秒）、
+           而且"匿名"其实并不彻底。但它是第一个在"无信任环境"下实现共识的实用方案，区块链这个思想本身已被广泛借用。
+           它也有意设计成"难度自动调节"（保持平均 10 分钟一块），以应对算力增长。</p>
+      </div>
+    </article>
+
+    <!-- PBFT -->
+    <article class="paper" id="bft">
+      <div class="paper-head">
+        <div class="paper-num">17</div>
+        <div class="meta">
+          <h3>Practical Byzantine Fault Tolerance (PBFT)</h3>
+          <div class="sub">Miguel Castro, Barbara Liskov · OSDI 1999</div>
+          <div class="tags"><span class="tag tag-red">拜占庭容错</span><span class="tag tag-purple">逻辑特色</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>前面所有协议都假设"故障 = 停止"（fail-stop）：机器要么正常工作，要么直接宕机，绝不会"撒谎"。
+           PBFT 处理的是<b>拜占庭故障</b>：节点可能被攻击、可能返回错误结果、可能<b>故意发送矛盾的消息</b>。
+           它用 3f+1 个副本容忍 f 个恶意节点，通过<b>三阶段投票（Pre-prepare / Prepare / Commit）</b>让诚实节点对操作顺序达成一致。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与 <a href="#raft">Raft</a> 的对比最能说明问题：Raft 只需 2f+1 个副本容忍 f 个故障，PBFT 却要 3f+1——
+           多出来的 f 个副本是"为恶意行为付出的保险费"。Raft 中"少数派说的不算"就够了；
+           但在 PBFT 中，你必须确保"即使 f 个节点撒谎，诚实节点也能识破"。
+           与 <a href="#bitcoin">Bitcoin</a> 的差异在于"是否需要身份"：PBFT 需要知道节点总数（有许可），Bitcoin 完全开放（无许可）。</p>
+        <div class="h-label k-deep"><span class="dot"></span>深入剖析：为什么必须 3f+1？为什么要第三阶段？</div>
+        <p><b>为什么是 3f+1？</b>如果只有 2f+1 个节点，客户端等待 f+1 个相同回复时，这 f+1 个可能全是"1 个诚实 + f 个恶意"，
+           于是"只有一个诚实节点看到了这个操作"。下一次请求的 f+1 个回复可能不含这个诚实节点，客户端就会被骗着接受了过期状态。
+           3f+1 保证了"任意两个 2f+1 的集合，至少有一个<b>诚实</b>节点重叠"，于是撒谎者无法一手遮天。</p>
+        <p><b>为什么要第三阶段（Commit）？</b>如果只有 Pre-prepare + Prepare 两个阶段，节点收到 2f+1 个 Prepare 后就执行操作——
+           但如果此时发生"视图切换"（换主节点），新主节点可能<b>没听说过</b>这个操作，于是会用同一个编号给另一个操作，
+           导致"同一个位置有两个不同操作"的灾难。加入 Commit 阶段后，节点只有收到 2f+1 个 Commit 才执行，
+           而新主节点在视图切换时必须收集 2f+1 份视图变更请求并据此修正日志——两者的 2f+1 集合必然有诚实节点重叠，
+           于是新主节点一定会知道那个操作。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>PBFT 的代价是<b>消息量巨大</b>（O(n²)，每个节点都要广播给所有节点），扩展性差，且需要额外的密码学开销。
+           它今天并未被广泛用于通用场景（人们更倾向"预防 + 检测"），但在联盟链（如 Hyperledger）和需要抵御恶意节点的场景中重新受到重视。
+           它的价值在于：<b>它把"容错"的边界从"会坏"推进到了"会撒谎"</b>。</p>
+      </div>
+    </article>
+
+    <!-- Lambda -->
+    <article class="paper" id="lambda">
+      <div class="paper-head">
+        <div class="paper-num">18</div>
+        <div class="meta">
+          <h3>On-demand Container Loading in AWS Lambda</h3>
+          <div class="sub">Marc Brooker et al. · USENIX ATC 2023</div>
+          <div class="tags"><span class="tag tag-sky">工程实践</span><span class="tag tag-gray">云原生</span></div>
+        </div>
+      </div>
+      <div class="paper-body">
+        <div class="h-label k-idea"><span class="dot"></span>核心设计理念</div>
+        <p>这是一篇"工程优化"论文：Serverless（无服务器）的核心痛点是<b>冷启动太慢</b>——用户代码要等容器镜像下载、解压、启动。
+           Lambda 的解法是<b>按需分块加载</b>：不把整个镜像一次性拉下来，而是把镜像切成块，
+           只先加载"启动真正需要的工作集（working set）"，其余部分在运行时按需从缓存拉取。</p>
+        <div class="h-label k-diff"><span class="dot"></span>与相邻论文的关键差异</div>
+        <p>与前面所有论文的差异是<b>它不解决"共识/一致性"问题，而是解决"单点性能"问题</b>。
+           它属于"系统优化 + 实测"这一类，与 <a href="#memcached">Memcached</a> 同属"经验论文"。
+           它把"缓存"这个老概念用到了极致：通过精细的块划分与缓存策略，把冷启动从秒级压到毫秒级。</p>
+        <div class="h-label k-trade"><span class="dot"></span>设计取舍与动机</div>
+        <p>它提醒我们：分布式系统的世界里，不是所有重要工作都是"新协议"。
+           <b>在真实系统中，把已有组件的性能优化到极致，往往比发明新算法更有价值</b>。
+           这篇论文也是全课的一个很好的收尾——从最底层的共识理论，一路看到云厂商最前沿的工程实践。</p>
+      </div>
+    </article>
+
+    <div class="note-box nb-key" style="margin-top:40px">
+      <span class="nb-ic">🧭</span>
+      <div><p><strong>下一步：</strong>读懂了论文的"为什么"，接下来就该动手了。去 <a href="labs.html">Lab 通关手册</a>，
+        看看这些设计如何变成一行行真实的 Go 代码；或者回到 <a href="notes.html">可视化笔记</a>，把还不清楚的概念再过一遍。</p></div>
+    </div>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="about"><h4>MIT 6.824 学习指南</h4><p>面向零基础初学者的分布式系统可视化学习站点，基于 MIT 6.824 / 6.5840 公开课程资料重新整理。</p></div>
+    <div><h4>本站导航</h4><ul><li><a href="index.html">首页</a></li><li><a href="labs.html">Lab 通关手册</a></li><li><a href="notes.html">可视化笔记</a></li></ul></div>
+    <div><h4>官方资料</h4><ul>
+      <li><a href="https://pdos.csail.mit.edu/6.824/schedule.html" target="_blank" rel="noopener">课程主页 / Schedule</a></li>
+      <li><a href="https://pdos.csail.mit.edu/6.824/papers/" target="_blank" rel="noopener">论文列表</a></li>
+    </ul></div>
+  </div>
+  <div class="footer-bottom"><span>本页为学习整理，版权归原始作者与 MIT PDOS 所有。</span><span>论文精讲</span></div>
+</footer>
+
+<script src="assets/app.js"></script>
+<script>
+/* 论文对比矩阵筛选 */
+(function(){
+  const bar = document.getElementById('matrix-filter');
+  const rows = Array.from(document.querySelectorAll('#matrix-table tbody tr'));
+  if(!bar) return;
+  const groups = [['all','全部'],['compute','计算框架'],['storage','存储与缓存'],['consensus','复制与共识'],['txn','一致性与事务'],['security','验证与安全']];
+  groups.forEach(([k,label],i)=>{
+    const b=document.createElement('button');
+    b.className='seq-btn'+(i===0?' primary':'');
+    b.textContent=label; b.dataset.k=k;
+    b.addEventListener('click',()=>{
+      document.querySelectorAll('#matrix-filter .seq-btn').forEach(x=>x.classList.remove('primary'));
+      b.classList.add('primary');
+      rows.forEach(r=>{ r.style.display = (k==='all'||r.dataset.theme===k)?'':'none'; });
+    });
+    bar.appendChild(b);
+  });
+})();
+</script>
+</body>
+</html>

@@ -19,10 +19,18 @@
 │   ├── hub.js            # 主页交互
 │   └── manifest.js       # ★ 站点清单 —— 唯一需要维护的文件
 ├── notes/                # 每篇笔记一个自包含目录
-│   └── speechops-architecture/
-│       ├── index.html
-│       ├── styles.css
-│       └── app.js
+│   ├── speechops-architecture/
+│   │   ├── index.html
+│   │   ├── styles.css
+│   │   └── app.js
+│   └── mit-6824-distributed-systems/   # MIT 6.824 零基础学习指南（多页子站）
+│       ├── index.html        # 入口：学习路径与主题地图
+│       ├── papers.html       # 18 篇论文精讲
+│       ├── labs.html         # 5 个 Lab 通关手册
+│       ├── notes.html        # 15 个可视化概念
+│       └── assets/
+│           ├── style.css
+│           └── app.js
 ├── .nojekyll             # 关闭 Jekyll 处理
 └── README.md
 ```

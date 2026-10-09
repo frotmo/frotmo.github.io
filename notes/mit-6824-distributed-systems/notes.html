@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>可视化笔记 · MIT 6.824 学习指南</title>
+<meta name="description" content="分布式系统核心概念的可视化讲解：通信示例动画、拓扑图、交互式线性一致性检查器。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">
+      <span class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="5" cy="6" r="2.4" fill="#fff"/><circle cx="19" cy="6" r="2.4" fill="#fff"/><circle cx="12" cy="18" r="2.4" fill="#fff"/><path d="M5 6h14M5 6l7 12M19 6l-7 12" stroke="#fff" stroke-width="1.3" opacity=".8"/></svg></span>
+      <span>MIT 6.824 学习指南<small>Distributed Systems · 零基础可视化</small></span>
+    </a>
+    <button class="nav-toggle" aria-label="菜单"><span></span><span></span><span></span></button>
+    <nav class="nav-links">
+      <a class="nav-back" href="../../index.html">← 学习笔记</a>
+      <a href="index.html">首页</a>
+      <a href="papers.html">论文精讲</a>
+      <a href="labs.html">Lab 通关</a>
+      <a href="notes.html">可视化笔记</a>
+    </nav>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="side-title">基础概念</div>
+    <ul class="side-nav">
+      <li><a href="#why">为什么分布式这么难</a></li>
+      <li><a href="#rpc">RPC 与三种失败</a></li>
+    </ul>
+    <div class="side-title">复制与共识</div>
+    <ul class="side-nav">
+      <li><a href="#rsm">复制状态机 RSM</a></li>
+      <li><a href="#splitbrain">主备复制与脑裂</a></li>
+      <li><a href="#quorum">Quorum 多数派</a></li>
+      <li><a href="#paxos">Paxos 两阶段</a></li>
+      <li><a href="#raft-elect">Raft 选举</a></li>
+      <li><a href="#raft-log">Raft 日志复制</a></li>
+      <li><a href="#chain">链式复制</a></li>
+    </ul>
+    <div class="side-title">一致性与事务</div>
+    <ul class="side-nav">
+      <li><a href="#linz">线性一致性（交互）</a></li>
+      <li><a href="#twopc">两阶段提交 2PC</a></li>
+      <li><a href="#snapshot">快照隔离与 TrueTime</a></li>
+    </ul>
+    <div class="side-title">性能与安全</div>
+    <ul class="side-nav">
+      <li><a href="#sharding">分片 Sharding</a></li>
+      <li><a href="#bft">拜占庭容错 3f+1</a></li>
+      <li><a href="#fork">区块链与分叉</a></li>
+    </ul>
+  </aside>
+
+  <main class="content">
+    <div class="crumb"><a href="index.html">首页</a> / 可视化笔记</div>
+    <div class="page-head">
+      <h1>可视化笔记</h1>
+      <p class="lede">课堂笔记（Lecture Notes）是极简的提纲，很多地方一笔带过。这一页把其中最核心的概念重新画一遍：
+        每个概念<b>一句话说清是什么</b>，配<b>一张看得懂的图</b>，需要动态过程的地方用<b>可播放的通信示例</b>，
+        并在最后补一段<b>扩展讲解</b>，把笔记里跳跃的地方接上。每个知识点控制在 3~5 分钟可读完。</p>
+    </div>
+
+    <!-- ================= 基础 ================= -->
+    <h2 style="margin-top:30px">基础概念</h2>
+
+    <!-- 为什么难 -->
+    <article class="concept" id="why">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-indigo">基础</span><h3>为什么分布式系统这么难</h3></div>
+        <p class="oneline">一句话：因为"部分失败（partial failure）"——你永远无法确定一台机器到底是死了，还是只是网络断了。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>本地调用 vs 远程调用：失败的含义完全不同</div>
+          <svg viewBox="0 0 720 250" role="img" aria-label="本地调用与远程调用的失败对比">
+            <!-- 左：本地 -->
+            <rect x="14" y="20" width="330" height="210" rx="14" fill="#f4f6fb" stroke="#e3e7f1"/>
+            <text x="34" y="48" font-size="13" font-weight="800" fill="#4b5570">本地函数调用</text>
+            <rect x="34" y="66" width="80" height="40" rx="9" fill="#eef0ff" stroke="#c7c9fb"/>
+            <text x="74" y="91" text-anchor="middle" font-size="12" fill="#4f46e5">函数 A</text>
+            <rect x="240" y="66" width="80" height="40" rx="9" fill="#e2f6f3" stroke="#a7e0d8"/>
+            <text x="280" y="91" text-anchor="middle" font-size="12" fill="#0d9488">函数 B</text>
+            <line x1="116" y1="86" x2="238" y2="86" stroke="#4f46e5" stroke-width="2" marker-end="url(#na)"/>
+            <text x="177" y="78" text-anchor="middle" font-size="10.5" fill="#4f46e5">调用</text>
+            <line x1="238" y1="106" x2="116" y2="106" stroke="#0d9488" stroke-width="2" marker-end="url(#nb)"/>
+            <text x="177" y="122" text-anchor="middle" font-size="10.5" fill="#0d9488">返回</text>
+            <text x="34" y="160" font-size="11.5" fill="#16a34a" font-weight="700">✓ 结果只有两种：</text>
+            <text x="34" y="180" font-size="11.5" fill="#4b5570">成功返回，或者抛出异常。</text>
+            <text x="34" y="200" font-size="11.5" fill="#4b5570">你能明确知道"发生了什么"。</text>
+            <!-- 右：远程 -->
+            <rect x="376" y="20" width="330" height="210" rx="14" fill="#fdf1de" stroke="#f3d9a8"/>
+            <text x="396" y="48" font-size="13" font-weight="800" fill="#92400e">远程过程调用 RPC</text>
+            <rect x="396" y="66" width="80" height="40" rx="9" fill="#eef0ff" stroke="#c7c9fb"/>
+            <text x="436" y="91" text-anchor="middle" font-size="12" fill="#4f46e5">客户端</text>
+            <rect x="602" y="66" width="80" height="40" rx="9" fill="#e2f6f3" stroke="#a7e0d8"/>
+            <text x="642" y="91" text-anchor="middle" font-size="12" fill="#0d9488">服务器</text>
+            <line x1="478" y1="86" x2="600" y2="86" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#nc)"/>
+            <text x="539" y="78" text-anchor="middle" font-size="10.5" fill="#d97706">请求</text>
+            <text x="539" y="126" text-anchor="middle" font-size="10.5" fill="#dc2626">回复可能永远不来</text>
+            <text x="396" y="160" font-size="11.5" fill="#dc2626" font-weight="700">✗ 失败时你无法区分：</text>
+            <text x="396" y="180" font-size="11.5" fill="#4b5570">请求没送到？执行了但回复丢了？</text>
+            <text x="396" y="200" font-size="11.5" fill="#4b5570">执行了但服务器崩了？</text>
+            <defs>
+              <marker id="na" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4f46e5"/></marker>
+              <marker id="nb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0d9488"/></marker>
+              <marker id="nc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d97706"/></marker>
+            </defs>
+          </svg>
+        </div>
+        <p><b>扩展讲解：</b>本地的函数调用，失败是"二元"的——要么成功返回，要么抛异常。而 RPC 的失败是"<b>不可判定</b>"的：
+           客户端只知道"没收到回复"，至于服务器是没收到、执行到一半、执行完了但回复丢了——<b>它永远无从得知</b>。</p>
+        <p>这个"不确定性"是所有分布式难题的源头。你后面会看到的所有技巧——版本号去重、幂等操作、超时重试、
+           Quorum、租约——本质上都是在想办法"在不确定的世界里，做出安全的决定"。</p>
+        <div class="note-box nb-key"><span class="nb-ic">🔑</span><div><p><strong>一句话记忆：</strong>单机系统的失败是"停止"，分布式系统的失败是"沉默"。而沉默意味着无限多种可能。</p></div></div>
+      </div>
+    </article>
+
+    <!-- RPC -->
+    <article class="concept" id="rpc">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-indigo">通信</span><h3>RPC 与三种失败</h3></div>
+        <p class="oneline">RPC 让远程调用看起来像本地调用，但网络会在三个位置"吃掉"消息，导致三种无法区分的失败。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>通信示例：请求/回复丢失的三种情况（点击播放）</div>
+          <div data-seq='{"actors":[{"id":"C","label":"客户端","sub":"Client","color":"req"},{"id":"S","label":"服务器","sub":"Server","color":"res"}],"steps":[{"from":"C","to":"S","label":"请求 put(x,1)","kind":"req"},{"divider":"情况一：请求在路上丢了"},{"from":"C","to":"S","label":"请求丢失","kind":"loss","dashed":true},{"note":"服务器从未收到，什么也没发生","actor":"S"},{"divider":"情况二：回复在路上丢了"},{"from":"C","to":"S","label":"请求到达","kind":"req"},{"from":"S","to":"C","label":"回复 ok（丢失）","kind":"loss","dashed":true},{"note":"服务器执行了，但客户端不知道","actor":"C"},{"divider":"情况三：执行后崩溃"},{"from":"C","to":"S","label":"请求到达","kind":"req"},{"note":"执行完成，回复前崩溃","actor":"S"},{"note":"客户端同样只知道：没收到回复","actor":"C"}]}'></div>
+        </div>
+        <p><b>扩展讲解：</b>正因为客户端无法区分这三种情况，它面临一个两难：<b>重发请求，还是放弃？</b></p>
+        <ul>
+          <li><b>放弃</b> → 如果服务器其实执行了，客户端却以为失败，状态就不一致了（比如转账扣了钱但客户端以为没扣）。</li>
+          <li><b>重发</b> → 如果服务器其实执行了，重发就会让它<b>执行两次</b>（比如扣两次钱）。</li>
+        </ul>
+        <p>所以真实的协议必须让"重复执行"变得无害，这就是<b>幂等（idempotent）</b>或<b>去重（deduplication）</b>：
+           给每个请求一个唯一编号，服务器记住"这个编号我处理过了"，重复请求直接返回上次的结果。</p>
+        <div class="note-box nb-info"><span class="nb-ic">🧪</span><div><p><strong>对应 Lab：</strong>Lab 2 用"版本号 + 条件写"实现 Put 的至多一次；Lab 4 用"客户端请求 ID + 结果缓存"实现同样的效果。两者都是这一节思想的落地。</p></div></div>
+      </div>
+    </article>
+
+    <!-- ================= 复制与共识 ================= -->
+    <h2 style="margin-top:52px">复制与共识</h2>
+
+    <!-- RSM -->
+    <article class="concept" id="rsm">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-teal">核心</span><h3>复制状态机（RSM）</h3></div>
+        <p class="oneline">相同的初始状态 + 相同的操作 + 相同的顺序 + 确定性 = 相同的最终状态。这就是所有复制系统的理论基石。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>架构：应用层与共识层的分工</div>
+          <svg viewBox="0 0 720 300" role="img" aria-label="复制状态机分层架构">
+            <!-- clients -->
+            <rect x="14" y="40" width="90" height="60" rx="11" fill="#eef0ff" stroke="#c7c9fb"/>
+            <text x="59" y="66" text-anchor="middle" font-size="12" font-weight="700" fill="#4f46e5">客户端</text>
+            <text x="59" y="84" text-anchor="middle" font-size="10" fill="#6b7280">Put / Get</text>
+            <!-- replicas -->
+            <g>
+              <rect x="150" y="24" width="150" height="118" rx="12" fill="#fff" stroke="#c7c9fb"/>
+              <rect x="162" y="36" width="126" height="42" rx="8" fill="#eef0ff"/>
+              <text x="225" y="54" text-anchor="middle" font-size="11" font-weight="700" fill="#4f46e5">KV 状态机</text>
+              <text x="225" y="70" text-anchor="middle" font-size="10" fill="#6b7280">x=1, y=2, ...</text>
+              <rect x="162" y="84" width="126" height="46" rx="8" fill="#e2f6f3"/>
+              <text x="225" y="102" text-anchor="middle" font-size="11" font-weight="700" fill="#0d9488">Raft 日志</text>
+              <text x="225" y="118" text-anchor="middle" font-size="10" fill="#6b7280">[1] [2] [3] ...</text>
+              <text x="225" y="158" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2038">副本 1（领导者）</text>
+            </g>
+            <g>
+              <rect x="318" y="24" width="150" height="118" rx="12" fill="#fff" stroke="#a7e0d8"/>
+              <rect x="330" y="36" width="126" height="42" rx="8" fill="#eef0ff"/>
+              <text x="393" y="54" text-anchor="middle" font-size="11" font-weight="700" fill="#4f46e5">KV 状态机</text>
+              <text x="393" y="70" text-anchor="middle" font-size="10" fill="#6b7280">x=1, y=2, ...</text>
+              <rect x="330" y="84" width="126" height="46" rx="8" fill="#e2f6f3"/>
+              <text x="393" y="102" text-anchor="middle" font-size="11" font-weight="700" fill="#0d9488">Raft 日志</text>
+              <text x="393" y="118" text-anchor="middle" font-size="10" fill="#6b7280">[1] [2] [3] ...</text>
+              <text x="393" y="158" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2038">副本 2</text>
+            </g>
+            <g>
+              <rect x="486" y="24" width="150" height="118" rx="12" fill="#fff" stroke="#a7e0d8"/>
+              <rect x="498" y="36" width="126" height="42" rx="8" fill="#eef0ff"/>
+              <text x="561" y="54" text-anchor="middle" font-size="11" font-weight="700" fill="#4f46e5">KV 状态机</text>
+              <text x="561" y="70" text-anchor="middle" font-size="10" fill="#6b7280">x=1, y=2, ...</text>
+              <rect x="498" y="84" width="126" height="46" rx="8" fill="#e2f6f3"/>
+              <text x="561" y="102" text-anchor="middle" font-size="11" font-weight="700" fill="#0d9488">Raft 日志</text>
+              <text x="561" y="118" text-anchor="middle" font-size="10" fill="#6b7280">[1] [2] [3] ...</text>
+              <text x="561" y="158" text-anchor="middle" font-size="11" font-weight="700" fill="#1a2038">副本 3</text>
+            </g>
+            <line x1="106" y1="70" x2="148" y2="70" stroke="#4f46e5" stroke-width="2" marker-end="url(#rsma)"/>
+            <defs><marker id="rsma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4f46e5"/></marker></defs>
+            <!-- 分层说明 -->
+            <rect x="150" y="192" width="486" height="34" rx="9" fill="#eef0ff"/>
+            <text x="393" y="213" text-anchor="middle" font-size="11.5" fill="#4f46e5" font-weight="700">上层：应用逻辑（由服务实现）— 收到已提交操作就执行 DoOp()</text>
+            <rect x="150" y="234" width="486" height="34" rx="9" fill="#e2f6f3"/>
+            <text x="393" y="255" text-anchor="middle" font-size="11.5" fill="#0d9488" font-weight="700">下层：共识层（Raft）— 只负责把操作排成一个大家都同意的顺序</text>
+            <text x="393" y="288" text-anchor="middle" font-size="10.5" fill="#8a93ab">关键分工：Raft 只管"顺序"，应用只管"执行"</text>
+          </svg>
+        </div>
+        <p><b>扩展讲解：</b>为什么这个"看似显然"的性质如此重要？因为它把"保持副本一致"这个难题，<b>巧妙地转化成了另一个更简单的问题</b>：</p>
+        <p>你不需要让副本之间"商量"最终状态该是什么——只要保证它们<b>收到操作的顺序一样</b>，剩下的交给"确定性执行"自动完成。
+           而"让一组机器就一个顺序达成一致"，正是共识协议（Paxos/Raft）的职责。</p>
+        <p>这也解释了为什么 Raft 要费那么大力气维护一条"日志"：<b>日志就是"顺序"的载体</b>。
+           一旦某条日志被多数派接受（提交），所有副本就都会按同样的位置执行它。</p>
+      </div>
+    </article>
+
+    <!-- 脑裂 -->
+    <article class="concept" id="splitbrain">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-red">陷阱</span><h3>主备复制与"脑裂"</h3></div>
+        <p class="oneline">最朴素的想法"主挂了就用备"，在网络分区时会变成灾难：两边都以为对方挂了，于是同时当主。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>网络分区导致的双主（split brain）</div>
+          <svg viewBox="0 0 720 250" role="img" aria-label="脑裂示意图">
+            <rect x="12" y="30" width="330" height="190" rx="14" fill="#fdeaea" stroke="#f5c6c6"/>
+            <text x="30" y="56" font-size="12.5" font-weight="800" fill="#dc2626">分区 A</text>
+            <rect x="40" y="76" width="110" height="52" rx="10" fill="#fff" stroke="#dc2626"/>
+            <text x="95" y="100" text-anchor="middle" font-size="12" font-weight="700" fill="#dc2626">S1 自认主</text>
+            <text x="95" y="117" text-anchor="middle" font-size="10" fill="#6b7280">接受写请求</text>
+            <rect x="186" y="76" width="110" height="52" rx="10" fill="#fff" stroke="#e3e7f1"/>
+            <text x="241" y="103" text-anchor="middle" font-size="12" fill="#4b5570">客户端 C1</text>
+            <text x="95" y="165" text-anchor="middle" font-size="11" fill="#4b5570">C1 写 x=1 到 S1</text>
+            <text x="95" y="185" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="700">S1 认为写成功了</text>
+
+            <rect x="378" y="30" width="330" height="190" rx="14" fill="#e2f6f3" stroke="#a7e0d8"/>
+            <text x="396" y="56" font-size="12.5" font-weight="800" fill="#0d9488">分区 B</text>
+            <rect x="406" y="76" width="110" height="52" rx="10" fill="#fff" stroke="#0d9488"/>
+            <text x="461" y="100" text-anchor="middle" font-size="12" font-weight="700" fill="#0d9488">S2 自认主</text>
+            <text x="461" y="117" text-anchor="middle" font-size="10" fill="#6b7280">接受读请求</text>
+            <rect x="552" y="76" width="110" height="52" rx="10" fill="#fff" stroke="#e3e7f1"/>
+            <text x="607" y="103" text-anchor="middle" font-size="12" fill="#4b5570">客户端 C2</text>
+            <text x="543" y="165" text-anchor="middle" font-size="11" fill="#4b5570">C2 读 x，得到旧值 0</text>
+            <text x="543" y="185" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="700">同一个 x，两个答案！</text>
+
+            <line x1="342" y1="60" x2="342" y2="200" stroke="#1a2038" stroke-width="2" stroke-dasharray="7 5"/>
+            <text x="360" y="230" text-anchor="middle" font-size="11" fill="#1a2038" font-weight="700">网络断开（但双方都活着）</text>
+          </svg>
+        </div>
+        <p><b>扩展讲解：</b>为什么主备复制这么"自然"的想法却行不通？因为<b>计算机无法区分"服务器崩溃"和"网络断开"</b>——
+           两者对客户端来说都只表现为"收不到响应"。</p>
+        <p>于是当网络断开时，两边都会想"对方挂了，我该顶上"，结果两个主同时服务，客户端看到互相矛盾的数据。
+           这就是著名的 <b>split brain（脑裂）</b>。</p>
+        <p>历史上，人们一度认为这个问题无解，只能靠"人工介入"来切换主备——但人工本身就是单点故障，也跟不上大规模系统的节奏。
+           直到 1990 年前后，Paxos 和 View-Stamped Replication 的出现才给出了自动化方案。<b>它们的关键武器就是下面这个：多数派。</b></p>
+      </div>
+    </article>
+
+    <!-- Quorum -->
+    <article class="concept" id="quorum">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-teal">基石</span><h3>Quorum 多数派：为什么"一半以上"能解决一切</h3></div>
+        <p class="oneline">任意两个多数派必然相交——这个简单的数学事实，是防止脑裂、保证一致性的全部秘密。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>3 台服务器：任意两个多数派必有交集</div>
+          <svg viewBox="0 0 720 260" role="img" aria-label="多数派交集示意">
+            <!-- 分区示意 -->
+            <circle cx="180" cy="120" r="70" fill="#eef0ff" stroke="#c7c9fb" opacity=".9"/>
+            <circle cx="290" cy="120" r="70" fill="#e2f6f3" stroke="#a7e0d8" opacity=".75"/>
+            <circle cx="235" cy="205" r="70" fill="#fdf1de" stroke="#f3d9a8" opacity=".75"/>
+            <text x="120" y="120" text-anchor="middle" font-size="12" font-weight="700" fill="#4f46e5">多数派 1</text>
+            <text x="345" y="100" text-anchor="middle" font-size="12" font-weight="700" fill="#0d9488">多数派 2</text>
+            <text x="235" y="252" text-anchor="middle" font-size="12" font-weight="700" fill="#d97706">多数派 3</text>
+            <text x="235" y="140" text-anchor="middle" font-size="10.5" fill="#1a2038" font-weight="700">必有交集</text>
+            <!-- 服务器点 -->
+            <circle cx="150" cy="90" r="8" fill="#4f46e5"/><text x="150" y="72" text-anchor="middle" font-size="10" fill="#4b5570">S1</text>
+            <circle cx="300" cy="90" r="8" fill="#0d9488"/><text x="300" y="72" text-anchor="middle" font-size="10" fill="#4b5570">S2</text>
+            <circle cx="235" cy="215" r="8" fill="#d97706"/><text x="235" y="238" text-anchor="middle" font-size="10" fill="#4b5570">S3</text>
+
+            <!-- 右侧说明 -->
+            <rect x="430" y="40" width="270" height="180" rx="12" fill="#f4f6fb" stroke="#e3e7f1"/>
+            <text x="450" y="66" font-size="12" font-weight="800" fill="#1a2038">推论</text>
+            <text x="450" y="92" font-size="11.5" fill="#4b5570">· 多数派 = 全部服务器的过半数</text>
+            <text x="450" y="114" font-size="11.5" fill="#4b5570">· 任意两个多数派至少共享一台</text>
+            <text x="450" y="136" font-size="11.5" fill="#4b5570">· 至多一个分区能凑齐多数派</text>
+            <text x="450" y="158" font-size="11.5" fill="#4b5570">· 少数派分区无法推进 → 不会脑裂</text>
+            <text x="450" y="186" font-size="11.5" fill="#16a34a" font-weight="700">2f+1 台可容忍 f 台故障</text>
+            <text x="450" y="206" font-size="11" fill="#8a93ab">3 台容忍 1 台；5 台容忍 2 台</text>
+          </svg>
+        </div>
+        <p><b>扩展讲解：</b>多数派机制解决了脑裂，逻辑非常漂亮：</p>
+        <ul>
+          <li><b>为什么不会有两个主？</b>成为主需要多数派同意，而两个多数派必然相交，交集里那台服务器<b>在同一任期只会投一次票</b>，所以不可能同时支持两个主。</li>
+          <li><b>为什么分区是安全的？</b>网络被切成两半时，最多只有一半能凑齐多数派，另一半无法推进，自然不会有第二个主。少数派恢复连通后，会看到更高任期的主并乖乖跟随。</li>
+          <li><b>为什么信息不会丢？</b>如果某个值被一个多数派接受了，之后任何新的多数派都会包含"至少一台知道这个值"的服务器，于是新主一定会得知它。</li>
+        </ul>
+        <div class="note-box nb-warn"><span class="nb-ic">⚠️</span><div><p><strong>最常见的误解：</strong>"多数派"是相对于<b>全部服务器</b>计算的，不是相对于"活着的服务器"。3 台机器里死掉 1 台，剩下 2 台仍是多数派；但如果死掉 2 台，剩下的 1 台<b>永远凑不齐多数派</b>，系统就会停止服务（这是正确的、安全的行为）。</p></div></div>
+      </div>
+    </article>
+
+    <!-- Paxos -->
+    <article class="concept" id="paxos">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-teal">共识</span><h3>Paxos：两阶段达成一致</h3></div>
+        <p class="oneline">先"问一圈有没有人已经定过值"（Prepare），再"让大家接受这个值"（Accept）。看到可能已定过的值就必须沿用。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>通信示例：一轮 Paxos（3 台中有 1 台掉线）</div>
+          <div data-seq='{"actors":[{"id":"P","label":"提议者","sub":"Proposer","color":"req"},{"id":"A1","label":"接受者 1","sub":"Acceptor","color":"res"},{"id":"A2","label":"接受者 2","sub":"Acceptor","color":"res"},{"id":"A3","label":"接受者 3","sub":"掉线","color":"warn"}],"steps":[{"divider":"阶段一：Prepare —— 询问是否已有约定"},{"from":"P","to":"A1","label":"prepare(n=5)","kind":"req"},{"from":"P","to":"A2","label":"prepare(n=5)","kind":"req"},{"from":"P","to":"A3","label":"prepare(n=5)","kind":"loss","dashed":true},{"from":"A1","to":"P","label":"prepare_ok（还没定过）","kind":"res"},{"from":"A2","to":"P","label":"prepare_ok（还没定过）","kind":"res"},{"note":"A3 掉线，但 2/3 已是多数派","actor":"A3"},{"divider":"阶段二：Accept —— 让多数派接受这个值"},{"from":"P","to":"A1","label":"accept(n=5, v=A)","kind":"req"},{"from":"P","to":"A2","label":"accept(n=5, v=A)","kind":"req"},{"from":"A1","to":"P","label":"accept_ok","kind":"res"},{"from":"A2","to":"P","label":"accept_ok","kind":"res"},{"note":"多数派已接受 → 值 A 被选定","actor":"P"}]}'></div>
+        </div>
+        <p><b>扩展讲解：</b>Paxos 最反直觉、也最重要的规则是这一条：</p>
+        <div class="quote">如果提议者从 Prepare 阶段看到"可能已经有人定过某个值"的证据，它<b>必须</b>沿用那个值，而不能换成自己想提的值。</div>
+        <p>为什么？因为提议者的多数派可能只和上一轮的多数派<b>重叠一台服务器</b>。它无法确知上一轮是否真的成功——
+           但只要有一丝可能，它就必须保守地沿用。这正是"<b>宁可重复，不可分歧</b>"的体现。</p>
+        <p>另一个容易忽略的细节是<b>持久化</b>：接受者必须把"见过的最小提议编号"和"已接受的值"写进磁盘。
+           因为如果它投完票就崩溃、重启后忘了，而它恰好是两轮多数派唯一的交集，新一轮就可能错误地选定别的值。
+           在 Paxos 里，"<b>忘了就等于没参与过</b>"。</p>
+      </div>
+    </article>
+
+    <!-- Raft 选举 -->
+    <article class="concept" id="raft-elect">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-teal">共识</span><h3>Raft 选举：随机化超时如何避免选票分裂</h3></div>
+        <p class="oneline">没有领导者时，节点随机等待一段时间后发起选举；因为超时不同，总有一个抢在别人前面拿到多数派。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>通信示例：一次成功的领导者选举</div>
+          <div data-seq='{"actors":[{"id":"S1","label":"S1","sub":"最先超时","color":"req"},{"id":"S2","label":"S2","sub":"Follower","color":"res"},{"id":"S3","label":"S3","sub":"Follower","color":"res"}],"steps":[{"divider":"1. 领导者失联，选举超时到期"},{"note":"S1 最先超时（随机最短）","actor":"S1"},{"note":"S2 稍晚","actor":"S2"},{"note":"S3 更晚","actor":"S3"},{"divider":"2. S1 自增任期并拉票"},{"from":"S1","to":"S2","label":"RequestVote(term=2)","kind":"vote"},{"from":"S1","to":"S3","label":"RequestVote(term=2)","kind":"vote"},{"from":"S2","to":"S1","label":"同意（任期更新）","kind":"res"},{"from":"S3","to":"S1","label":"同意（任期更新）","kind":"res"},{"divider":"3. 当选领导者，发送心跳"},{"from":"S1","to":"S2","label":"AppendEntries（心跳）","kind":"commit"},{"from":"S1","to":"S3","label":"AppendEntries（心跳）","kind":"commit"},{"note":"心跳让其他节点重置超时，不再发起选举","actor":"S1"}]}'></div>
+        </div>
+        <p><b>扩展讲解：</b>为什么必须"随机"？想象所有节点的超时时间完全一样：它们会在同一瞬间全部超时、全部给自己投票、全部向别人拉票。
+           结果每人都只拿到自己那一票，谁也凑不齐多数派——这就是<b>选票分裂（split vote）</b>，选举失败。</p>
+        <p>随机化打破了这种对称性：总有一个节点最先超时、抢先发起选举，在别人还没来得及参选时就把票拿够了。
+           如果还是失败（比如两个节点超时时间太接近），系统会进入下一轮、换一个任期再来一次——<b>慢一点，但一定安全</b>。</p>
+        <div class="note-box nb-info"><span class="nb-ic">🧪</span><div><p><strong>Lab 提示：</strong>Lab 3 要求"领导者每秒心跳不超过 10 次"，同时要求"旧主故障后 5 秒内选出新主"。这两个约束共同决定了你的选举超时必须比论文建议的 150–300ms <b>更大</b>。</p></div></div>
+      </div>
+    </article>
+
+    <!-- Raft 日志 -->
+    <article class="concept" id="raft-log">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-teal">共识</span><h3>Raft 日志复制：一次 Put 的完整旅程</h3></div>
+        <p class="oneline">领导者把命令追加到日志、复制给追随者，多数派确认后提交，然后才回复客户端。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>通信示例：从客户端 Put 到提交</div>
+          <div data-seq='{"actors":[{"id":"C","label":"客户端","sub":"Clerk","color":"req"},{"id":"L","label":"领导者","sub":"Leader","color":"commit"},{"id":"F1","label":"追随者 1","sub":"Follower","color":"res"},{"id":"F2","label":"追随者 2","sub":"Follower","color":"res"}],"steps":[{"from":"C","to":"L","label":"Put(x,1)","kind":"req"},{"from":"L","to":"F1","label":"AppendEntries(条目@3)","kind":"async"},{"from":"L","to":"F2","label":"AppendEntries(条目@3)","kind":"async"},{"from":"F1","to":"L","label":"写入成功","kind":"res"},{"from":"F2","to":"L","label":"写入成功","kind":"res"},{"note":"多数派(2/3)已写入 → 提交","actor":"L"},{"from":"L","to":"C","label":"回复 ok","kind":"commit"},{"divider":"提交信息通过后续心跳传播"},{"from":"L","to":"F1","label":"心跳携带 commitIndex","kind":"async"},{"from":"L","to":"F2","label":"心跳携带 commitIndex","kind":"async"},{"note":"各副本执行该条目，状态机保持一致","actor":"F1"}]}'></div>
+        </div>
+        <p><b>扩展讲解：</b>这里有两个容易搞错的点。</p>
+        <p><b>① "提交"发生在多数派写入的那一刻，而不是客户端收到回复时。</b>因为只要多数派持久化了这条日志，即使领导者随后崩溃，新选出的领导者也必然拥有它（这正是"选举限制"的作用），所以它不会丢。</p>
+        <p><b>② 领导者必须在自己的<b>当前任期</b>内确认多数派写入，才能推进 commitIndex。</b>为什么不能只看"某个旧任期的条目被复制到了多数派"？
+           因为一个旧条目可能看起来安全，但随后被新领导者覆盖掉——这就是 Raft 论文 Figure 8 描述的经典陷阱。这个细节是 Lab 3C 的重点。</p>
+      </div>
+    </article>
+
+    <!-- 链式复制 -->
+    <article class="concept" id="chain">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-teal">复制</span><h3>链式复制：写走全链，读只在链尾</h3></div>
+        <p class="oneline">把副本排成一条链，写请求从链头一路传到链尾，读请求只问链尾。读写负载被分散到两端。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>拓扑：写沿链前进，读只在尾</div>
+          <svg viewBox="0 0 720 210" role="img" aria-label="链式复制拓扑">
+            <defs>
+              <marker id="cwa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4f46e5"/></marker>
+              <marker id="cwb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0d9488"/></marker>
+            </defs>
+            <rect x="14" y="70" width="90" height="50" rx="10" fill="#eef0ff" stroke="#c7c9fb"/>
+            <text x="59" y="100" text-anchor="middle" font-size="12" font-weight="700" fill="#4f46e5">客户端</text>
+
+            <rect x="140" y="66" width="110" height="58" rx="11" fill="#fff" stroke="#4f46e5" stroke-width="2"/>
+            <text x="195" y="92" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4f46e5">链头 Head</text>
+            <text x="195" y="110" text-anchor="middle" font-size="10" fill="#6b7280">接收写、定序</text>
+
+            <rect x="300" y="66" width="110" height="58" rx="11" fill="#fff" stroke="#e3e7f1"/>
+            <text x="355" y="92" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4b5570">中间节点</text>
+            <text x="355" y="110" text-anchor="middle" font-size="10" fill="#6b7280">只转发</text>
+
+            <rect x="460" y="66" width="110" height="58" rx="11" fill="#fff" stroke="#0d9488" stroke-width="2"/>
+            <text x="515" y="92" text-anchor="middle" font-size="12.5" font-weight="800" fill="#0d9488">链尾 Tail</text>
+            <text x="515" y="110" text-anchor="middle" font-size="10" fill="#6b7280">确认提交、服务读</text>
+
+            <line x1="106" y1="95" x2="138" y2="95" stroke="#4f46e5" stroke-width="2" marker-end="url(#cwa)"/>
+            <text x="122" y="86" text-anchor="middle" font-size="9.5" fill="#4f46e5">写</text>
+            <line x1="252" y1="95" x2="298" y2="95" stroke="#4f46e5" stroke-width="2" marker-end="url(#cwa)"/>
+            <line x1="412" y1="95" x2="458" y2="95" stroke="#4f46e5" stroke-width="2" marker-end="url(#cwa)"/>
+            <text x="355" y="78" text-anchor="middle" font-size="9.5" fill="#4f46e5">写沿链前进</text>
+
+            <path d="M515 128 Q360 180 59 128" fill="none" stroke="#0d9488" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#cwb)"/>
+            <text x="300" y="186" text-anchor="middle" font-size="10.5" fill="#0d9488" font-weight="700">读只在链尾进行（链尾一定是最新、最完整的）</text>
+
+            <rect x="596" y="66" width="110" height="58" rx="11" fill="#f4f6fb" stroke="#e3e7f1"/>
+            <text x="651" y="88" text-anchor="middle" font-size="11" font-weight="700" fill="#4b5570">配置服务</text>
+            <text x="651" y="106" text-anchor="middle" font-size="10" fill="#6b7280">CFG 管理故障切换</text>
+          </svg>
+        </div>
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>通信示例：一次写与一次读</div>
+          <div data-seq='{"actors":[{"id":"C","label":"客户端","sub":"Client","color":"req"},{"id":"H","label":"链头","sub":"Head","color":"req"},{"id":"M","label":"中间","sub":"Middle","color":"res"},{"id":"T","label":"链尾","sub":"Tail","color":"commit"}],"steps":[{"divider":"写：必须走完整条链"},{"from":"C","to":"H","label":"update(x=1)","kind":"req"},{"from":"H","to":"M","label":"转发（带序号）","kind":"async"},{"from":"M","to":"T","label":"转发","kind":"async"},{"note":"到达链尾 = 每个副本都已拥有该更新","actor":"T"},{"from":"T","to":"C","label":"回复 ok（此刻才提交）","kind":"commit"},{"divider":"读：只发给链尾"},{"from":"C","to":"T","label":"read(x)","kind":"res"},{"note":"链尾一定持有全部已提交更新","actor":"T"}]}'></div>
+        </div>
+        <p><b>扩展讲解：</b>为什么读<b>必须</b>在链尾？因为更新沿链前进时，链上各节点处于"前新后旧"的不同状态。
+           如果允许从中间读，就可能读到"还没走完全链"的更新。更糟的是：如果链头刚收到更新就回复"成功"，
+           但链还没走完就发生故障，这个更新可能丢失，而客户端却以为成功了。</p>
+        <p>所以规则必须严格：<b>只有到达链尾才算提交</b>。因为到达链尾意味着链上每个节点都已拥有它，
+           此后无论谁故障，更新都不会消失。这个"用最后一道关卡确认"的思路，保证了永不暴露未提交的数据。</p>
+      </div>
+    </article>
+
+    <!-- ================= 一致性与事务 ================= -->
+    <h2 style="margin-top:52px">一致性与事务</h2>
+
+    <!-- 线性一致性 -->
+    <article class="concept" id="linz">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-indigo">一致性</span><h3>线性一致性：到底什么叫"强一致"</h3></div>
+        <p class="oneline">如果能为每个操作在它的开始与结束之间找到一个"线性化点"，使得按这些点串行执行的结果与观察一致，这段历史就是线性一致的。</p>
+      </div>
+      <div class="concept-body">
+        <p>下面是一个<b>真正会搜索</b>的检查器：它会尝试所有可能的执行顺序，判断是否存在一种顺序同时满足"实时先后约束"和"读写语义"。
+           先自己判断一下，再点按钮看答案。</p>
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>交互：判断这段历史是否线性一致</div>
+          <div id="linz-widget"></div>
+        </div>
+        <p><b>扩展讲解：</b>线性一致性听起来抽象，但它排除的"反常"非常具体：</p>
+        <ul>
+          <li><b>过期读：</b>一个写已经完成，之后开始的读却看不到它。这禁止了"从落后的副本读"。</li>
+          <li><b>穿越读：</b>先读到新值、后读到旧值（历史 C）。一旦某个读看到了写，之后所有读都必须看到它。</li>
+          <li><b>脑裂：</b>两个主各自服务，产生无法自洽的历史。</li>
+          <li><b>崩溃后遗忘：</b>已回复客户端的写，重启后消失了。</li>
+          <li><b>重复执行：</b>网络重传导致同一请求执行两次，产生非法历史。</li>
+        </ul>
+        <p>但要记住：<b>线性一致性允许"多个结果都合法"</b>。并发的一次读和一次写，读可能读到旧值也可能读到新值——
+           只要存在自洽的线性化点即可。它约束的是"结果集合"，不是"唯一结果"。</p>
+        <div class="note-box nb-key"><span class="nb-ic">💡</span><div><p><strong>为什么它昂贵：</strong>跨洲的一次"写后读"，必须等值传播过去，受光速限制，串行吞吐量可能只有每秒几十次。所以真实系统常在这条"黄金标准"和性能之间做取舍。</p></div></div>
+      </div>
+    </article>
+
+    <!-- 2PC -->
+    <article class="concept" id="twopc">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-amber">事务</span><h3>两阶段提交 2PC：跨机器的"全做或全不做"</h3></div>
+        <p class="oneline">先问所有人"能不能提交"，全说能，才通知所有人提交。只要有一个人说不，就全体回滚。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>通信示例：一次成功的两阶段提交</div>
+          <div data-seq='{"actors":[{"id":"TC","label":"协调者","sub":"Coordinator","color":"req"},{"id":"A","label":"参与者 A","sub":"分片 A","color":"res"},{"id":"B","label":"参与者 B","sub":"分片 B","color":"res"}],"steps":[{"divider":"阶段一：Prepare（投票）"},{"from":"TC","to":"A","label":"PREPARE","kind":"req"},{"from":"TC","to":"B","label":"PREPARE","kind":"req"},{"from":"A","to":"TC","label":"YES（已写盘、持锁）","kind":"res"},{"from":"B","to":"TC","label":"YES（已写盘、持锁）","kind":"res"},{"note":"双方都进入 prepared，锁一直持有","actor":"TC"},{"divider":"阶段二：Commit（执行决定）"},{"from":"TC","to":"A","label":"COMMIT","kind":"commit"},{"from":"TC","to":"B","label":"COMMIT","kind":"commit"},{"from":"A","to":"TC","label":"ACK","kind":"res"},{"from":"B","to":"TC","label":"ACK","kind":"res"},{"note":"收到全部 ACK 后，协调者才能忘记该事务","actor":"TC"}]}'></div>
+        </div>
+        <p><b>扩展讲解：</b>2PC 最著名的缺陷是<b>阻塞</b>。一个参与者投了 YES 之后，如果迟迟收不到最终决定，它<b>既不能提交也不能回滚，只能抱着锁一直等</b>。为什么？</p>
+        <p>因为它无法区分两种情况：协调者可能已经决定"提交"并通知了<b>别的</b>参与者（那个参与者会提交）；也可能决定的是"回滚"。
+           如果它擅自回滚，就会出现"一人提交、一人回滚"，原子性被破坏。所以它只能等协调者恢复。</p>
+        <div class="note-box nb-warn"><span class="nb-ic">⚠️</span><div><p><strong>重要区分：</strong>Raft 与 2PC 解决的是<b>完全不同的问题</b>。Raft 让多台机器做<b>同一件事</b>（复制），只需多数派存活；2PC 让多台机器做<b>不同的事</b>（各改自己的分片），必须所有人都在。所以 Raft 提升可用性，2PC 提升原子性。<a href="papers.html#spanner">Spanner</a> 同时要两者——它用 Paxos 复制每个参与者，再在复制组之上跑 2PC。</p></div></div>
+      </div>
+    </article>
+
+    <!-- 快照隔离 -->
+    <article class="concept" id="snapshot">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-amber">事务</span><h3>快照隔离与 TrueTime：Spanner 的两把钥匙</h3></div>
+        <p class="oneline">只读事务读"某个时间戳的快照"（不加锁）；再用 TrueTime 保证时间戳的全局顺序，从而获得外部一致性。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>快照隔离：只读事务读到"同一时刻"的一致视图</div>
+          <svg viewBox="0 0 720 240" role="img" aria-label="快照隔离时间线">
+            <line x1="40" y1="200" x2="690" y2="200" stroke="#cfd6e6" stroke-width="1.5"/>
+            <text x="360" y="228" text-anchor="middle" font-size="11" fill="#8a93ab">时间 →</text>
+            <!-- T1 -->
+            <rect x="80" y="40" width="180" height="34" rx="8" fill="#eef0ff" stroke="#c7c9fb"/>
+            <text x="170" y="62" text-anchor="middle" font-size="11.5" font-weight="700" fill="#4f46e5">T1 写事务 @10（x=9, y=11）</text>
+            <!-- T2 -->
+            <rect x="380" y="100" width="180" height="34" rx="8" fill="#f4ebfe" stroke="#ddc9fb"/>
+            <text x="470" y="122" text-anchor="middle" font-size="11.5" font-weight="700" fill="#9333ea">T2 写事务 @20（x=8, y=12）</text>
+            <!-- T3 -->
+            <rect x="250" y="160" width="150" height="34" rx="8" fill="#e2f6f3" stroke="#a7e0d8"/>
+            <text x="325" y="182" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0d9488">T3 只读 @15</text>
+            <line x1="325" y1="160" x2="325" y2="120" stroke="#0d9488" stroke-width="1.6" stroke-dasharray="4 4"/>
+            <text x="325" y="112" text-anchor="middle" font-size="10.5" fill="#0d9488">读 x@10、y@10</text>
+            <text x="325" y="46" text-anchor="middle" font-size="10.5" fill="#4b5570">T3 虽然与 T2 并发，但读的是 @10 的版本</text>
+            <!-- 版本 -->
+            <rect x="80" y="86" width="180" height="26" rx="6" fill="#f4f6fb" stroke="#e3e7f1"/>
+            <text x="170" y="104" text-anchor="middle" font-size="10.5" fill="#4b5570">x@10=9, y@10=11</text>
+            <rect x="380" y="146" width="180" height="26" rx="6" fill="#f4f6fb" stroke="#e3e7f1"/>
+            <text x="470" y="164" text-anchor="middle" font-size="10.5" fill="#4b5570">x@20=8, y@20=12</text>
+          </svg>
+        </div>
+        <p><b>扩展讲解（TrueTime）：</b>Spanner 不假装时钟是准的，而是<b>诚实地返回一个不确定区间</b>
+           <code>[earliest, latest]</code>，并保证真实时间一定落在其中（宽度通常不到 1ms）。然后它用两条规则保证外部一致性：</p>
+        <ul>
+          <li><b>起始规则：</b>写事务的时间戳取 <code>TT.now().latest</code>。</li>
+          <li><b>提交等待：</b>在释放锁、回复客户端之前，一直等到 <code>TS &lt; TT.now().earliest</code>，即确保这个时间戳<b>已经确定成为过去</b>。</li>
+        </ul>
+        <p>于是"先完成的 T1"其时间戳必然落在过去，"后开始的 T2"其时间戳必然落在未来，因此 <b>TS2 &gt; TS1</b>，
+           T2 的快照读一定包含 T1 的写。<b>用"等待"把不确定的时间区间抹平，换取全局有序</b>——这是全篇最漂亮的思想。</p>
+      </div>
+    </article>
+
+    <!-- ================= 性能与安全 ================= -->
+    <h2 style="margin-top:52px">性能与安全</h2>
+
+    <!-- 分片 -->
+    <article class="concept" id="sharding">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-sky">扩展性</span><h3>分片 Sharding：用"切数据"换"可扩展"</h3></div>
+        <p class="oneline">把键空间切成若干分片，每个分片交给一个独立的复制组处理，于是总吞吐量随组数线性增长。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>分片与配置：键 → 分片 → 组</div>
+          <svg viewBox="0 0 720 280" role="img" aria-label="分片架构">
+            <defs><marker id="sha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0ea5e9"/></marker></defs>
+            <!-- keys -->
+            <rect x="14" y="30" width="120" height="210" rx="12" fill="#f4f6fb" stroke="#e3e7f1"/>
+            <text x="74" y="54" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4b5570">键空间</text>
+            <text x="74" y="86" text-anchor="middle" font-size="11" fill="#0ea5e9" font-family="monospace">a, b, c ...</text>
+            <text x="74" y="120" text-anchor="middle" font-size="11" fill="#0ea5e9" font-family="monospace">f, g, h ...</text>
+            <text x="74" y="154" text-anchor="middle" font-size="11" fill="#0ea5e9" font-family="monospace">m, n, o ...</text>
+            <text x="74" y="188" text-anchor="middle" font-size="11" fill="#0ea5e9" font-family="monospace">s, t, u ...</text>
+            <text x="74" y="222" text-anchor="middle" font-size="10" fill="#8a93ab">hash(key) % N</text>
+            <!-- shards -->
+            <g>
+              <rect x="200" y="34" width="110" height="42" rx="9" fill="#e6f6fe" stroke="#bfe6f7"/>
+              <text x="255" y="60" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0284c7">分片 1</text>
+              <rect x="200" y="88" width="110" height="42" rx="9" fill="#e6f6fe" stroke="#bfe6f7"/>
+              <text x="255" y="114" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0284c7">分片 2</text>
+              <rect x="200" y="142" width="110" height="42" rx="9" fill="#e6f6fe" stroke="#bfe6f7"/>
+              <text x="255" y="168" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0284c7">分片 3</text>
+              <rect x="200" y="196" width="110" height="42" rx="9" fill="#e6f6fe" stroke="#bfe6f7"/>
+              <text x="255" y="222" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0284c7">分片 4</text>
+            </g>
+            <line x1="136" y1="120" x2="198" y2="120" stroke="#0ea5e9" stroke-width="2" marker-end="url(#sha)"/>
+            <!-- groups -->
+            <g>
+              <rect x="370" y="34" width="150" height="96" rx="12" fill="#fff" stroke="#4f46e5" stroke-width="1.8"/>
+              <text x="445" y="58" text-anchor="middle" font-size="12" font-weight="800" fill="#4f46e5">组 G1（Raft）</text>
+              <text x="445" y="80" text-anchor="middle" font-size="10.5" fill="#6b7280">分片 1 + 分片 3</text>
+              <text x="445" y="102" text-anchor="middle" font-size="10.5" fill="#6b7280">3 副本 · 多数派</text>
+              <text x="445" y="120" text-anchor="middle" font-size="10" fill="#8a93ab">并行处理 →</text>
+              <rect x="370" y="142" width="150" height="96" rx="12" fill="#fff" stroke="#0d9488" stroke-width="1.8"/>
+              <text x="445" y="166" text-anchor="middle" font-size="12" font-weight="800" fill="#0d9488">组 G2（Raft）</text>
+              <text x="445" y="188" text-anchor="middle" font-size="10.5" fill="#6b7280">分片 2 + 分片 4</text>
+              <text x="445" y="210" text-anchor="middle" font-size="10.5" fill="#6b7280">3 副本 · 多数派</text>
+              <text x="445" y="228" text-anchor="middle" font-size="10" fill="#8a93ab">并行处理 →</text>
+            </g>
+            <line x1="312" y1="80" x2="368" y2="70" stroke="#0ea5e9" stroke-width="1.6" marker-end="url(#sha)"/>
+            <line x1="312" y1="160" x2="368" y2="90" stroke="#0ea5e9" stroke-width="1.6" marker-end="url(#sha)"/>
+            <line x1="312" y1="200" x2="368" y2="180" stroke="#0ea5e9" stroke-width="1.6" marker-end="url(#sha)"/>
+            <!-- config -->
+            <rect x="560" y="90" width="146" height="96" rx="12" fill="#fdf1de" stroke="#f3d9a8"/>
+            <text x="633" y="116" text-anchor="middle" font-size="12" font-weight="800" fill="#d97706">配置服务</text>
+            <text x="633" y="138" text-anchor="middle" font-size="10.5" fill="#92400e">分片 → 组的映射</text>
+            <text x="633" y="158" text-anchor="middle" font-size="10.5" fill="#92400e">含版本号 Num</text>
+            <text x="633" y="176" text-anchor="middle" font-size="10" fill="#8a93ab">客户端先查它</text>
+          </svg>
+        </div>
+        <p><b>扩展讲解：</b>分片带来的真正难题不是"怎么切"，而是<b>"怎么搬"</b>——因为负载会变化（有的组变重了），
+           组也会增删（扩容、下线维护）。搬动分片时，必须保证<b>任何时刻只有一个组在服务某个分片</b>，
+           否则客户端可能一半读到旧组、一半读到新组，破坏线性一致性。</p>
+        <p>Lab 5 用的方案是"<b>冻结 → 安装 → 删除 → 发布新配置</b>"：
+           先在源组冻结分片（拒绝该分片的写），把数据复制到目标组，再删掉源组的副本，最后才更新配置让客户端知道。
+           整个过程中，<b>其他不受影响的分片继续正常服务</b>。这个方案的美妙之处是：组与组之间<b>不需要直接通信</b>，
+           全靠控制器居中协调，从而避免了分布式系统里最麻烦的"多方协作"问题。</p>
+        <div class="note-box nb-info"><span class="nb-ic">🧪</span><div><p><strong>对应 Lab：</strong><a href="labs.html#lab5">Lab 5</a> 就是这个设计的完整实现，还额外要求你处理"控制器崩溃/被分区"以及"多个控制器并发"的容错场景。</p></div></div>
+      </div>
+    </article>
+
+    <!-- BFT -->
+    <article class="concept" id="bft">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-red">安全</span><h3>拜占庭容错：当节点会"撒谎"</h3></div>
+        <p class="oneline">前面假设节点只会"停止"，PBFT 处理节点会"说谎"的情况——需要 3f+1 个副本才能容忍 f 个恶意节点。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>为什么是 3f+1 而不是 2f+1</div>
+          <svg viewBox="0 0 720 250" role="img" aria-label="拜占庭容错配额示意">
+            <!-- 2f+1 失败 -->
+            <rect x="14" y="24" width="330" height="202" rx="14" fill="#fdeaea" stroke="#f5c6c6"/>
+            <text x="34" y="50" font-size="12.5" font-weight="800" fill="#dc2626">若只有 2f+1 台（3 台，f=1）</text>
+            <circle cx="80" cy="110" r="20" fill="#dc2626"/><text x="80" y="115" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">恶意</text>
+            <circle cx="170" cy="110" r="20" fill="#16a34a"/><text x="170" y="115" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">诚实</text>
+            <circle cx="260" cy="110" r="20" fill="#16a34a"/><text x="260" y="115" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">诚实</text>
+            <text x="179" y="160" text-anchor="middle" font-size="11" fill="#4b5570">客户端等 f+1 = 2 个相同回复</text>
+            <text x="179" y="180" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="700">可能是"1 恶意 + 1 诚实"</text>
+            <text x="179" y="202" text-anchor="middle" font-size="10.5" fill="#8a93ab">下次请求可能不含那个诚实节点 → 被骗</text>
+
+            <!-- 3f+1 成功 -->
+            <rect x="376" y="24" width="330" height="202" rx="14" fill="#e6f7ec" stroke="#bfe9cd"/>
+            <text x="396" y="50" font-size="12.5" font-weight="800" fill="#16a34a">3f+1 台（4 台，f=1）</text>
+            <circle cx="430" cy="110" r="20" fill="#dc2626"/><text x="430" y="115" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">恶意</text>
+            <circle cx="500" cy="110" r="20" fill="#16a34a"/><text x="500" y="115" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">诚实</text>
+            <circle cx="570" cy="110" r="20" fill="#16a34a"/><text x="570" y="115" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">诚实</text>
+            <circle cx="640" cy="110" r="20" fill="#16a34a"/><text x="640" y="115" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">诚实</text>
+            <text x="541" y="160" text-anchor="middle" font-size="11" fill="#4b5570">客户端等 2f+1 = 3 个相同回复</text>
+            <text x="541" y="180" text-anchor="middle" font-size="11" fill="#16a34a" font-weight="700">必然包含多数诚实节点</text>
+            <text x="541" y="202" text-anchor="middle" font-size="10.5" fill="#8a93ab">任意两个 2f+1 集合必有诚实节点重叠</text>
+          </svg>
+        </div>
+        <p><b>扩展讲解：</b>PBFT 用三阶段（Pre-prepare → Prepare → Commit）而不是两阶段，原因是"视图切换"（换主节点）时的安全。
+           如果只有两阶段，节点收到 2f+1 个 Prepare 就执行了操作；但若此时换了主节点，新主节点可能<b>从没听说过</b>这个操作，
+           于是会给同一个编号分配另一个操作——同一个位置出现两个不同操作，系统就崩了。</p>
+        <p>加入 Commit 阶段后，节点只有在收到 2f+1 个 Commit 时才执行；而新主节点在切换时必须收集 2f+1 份视图变更请求并据此修正日志。
+           这两组 2f+1 必然有诚实节点重叠，于是新主节点一定会知道那个操作。<b>用"多一轮投票"换来"换主时不会丢操作"</b>，这就是第三阶段的意义。</p>
+        <div class="note-box nb-key"><span class="nb-ic">⚖️</span><div><p><strong>与 Raft 的对比：</strong>Raft 只需 2f+1 就能容忍 f 个"停止型"故障；PBFT 要多花 f 台机器，为的是抵御"会撒谎"的节点。多出来的成本，就是"应对恶意"的保险费。</p></div></div>
+      </div>
+    </article>
+
+    <!-- 区块链 -->
+    <article class="concept" id="fork">
+      <div class="concept-head">
+        <div class="row"><span class="tag tag-red">去中心化</span><h3>区块链：用"最长链"解决分叉</h3></div>
+        <p class="oneline">在没有身份、没有许可的网络里，用工作量证明让"延长链"具有真实代价，从而让分叉自动收敛到最长的那条。</p>
+      </div>
+      <div class="concept-body">
+        <div class="viz">
+          <div class="viz-title"><span class="dot"></span>分叉的产生与收敛</div>
+          <svg viewBox="0 0 720 260" role="img" aria-label="区块链分叉示意">
+            <!-- 主链 -->
+            <g>
+              <rect x="30" y="120" width="60" height="40" rx="7" fill="#eef0ff" stroke="#c7c9fb"/><text x="60" y="145" text-anchor="middle" font-size="11" fill="#4f46e5">B4</text>
+              <rect x="100" y="120" width="60" height="40" rx="7" fill="#eef0ff" stroke="#c7c9fb"/><text x="130" y="145" text-anchor="middle" font-size="11" fill="#4f46e5">B5</text>
+              <line x1="90" y1="140" x2="98" y2="140" stroke="#cfd6e6" stroke-width="2"/>
+            </g>
+            <!-- 分叉 -->
+            <rect x="180" y="60" width="60" height="40" rx="7" fill="#fdf1de" stroke="#f3d9a8"/><text x="210" y="85" text-anchor="middle" font-size="11" fill="#d97706">B6a</text>
+            <rect x="180" y="180" width="60" height="40" rx="7" fill="#fdf1de" stroke="#f3d9a8"/><text x="210" y="205" text-anchor="middle" font-size="11" fill="#d97706">B6b</text>
+            <path d="M160 140 L180 80" stroke="#cfd6e6" stroke-width="2" fill="none"/>
+            <path d="M160 140 L180 200" stroke="#cfd6e6" stroke-width="2" fill="none"/>
+            <!-- 上支更长 -->
+            <rect x="260" y="60" width="60" height="40" rx="7" fill="#e6f7ec" stroke="#bfe9cd"/><text x="290" y="85" text-anchor="middle" font-size="11" fill="#16a34a">B7</text>
+            <rect x="340" y="60" width="60" height="40" rx="7" fill="#e6f7ec" stroke="#bfe9cd"/><text x="370" y="85" text-anchor="middle" font-size="11" fill="#16a34a">B8</text>
+            <line x1="240" y1="80" x2="258" y2="80" stroke="#cfd6e6" stroke-width="2"/>
+            <line x1="320" y1="80" x2="338" y2="80" stroke="#cfd6e6" stroke-width="2"/>
+            <text x="290" y="42" text-anchor="middle" font-size="11.5" fill="#16a34a" font-weight="700">更长 → 全网接受</text>
+            <!-- 下支被弃 -->
+            <text x="210" y="242" text-anchor="middle" font-size="11" fill="#dc2626">更短 → 被放弃</text>
+            <text x="210" y="258" text-anchor="middle" font-size="10" fill="#8a93ab">其中的交易可能"消失"</text>
+            <!-- 说明 -->
+            <rect x="450" y="60" width="256" height="150" rx="12" fill="#f4f6fb" stroke="#e3e7f1"/>
+            <text x="470" y="86" font-size="12" font-weight="800" fill="#1a2038">为什么最长链胜出</text>
+            <text x="470" y="110" font-size="11" fill="#4b5570">· 多数矿工先在 B6a 上继续挖</text>
+            <text x="470" y="132" font-size="11" fill="#4b5570">· B6a 分支自然变得更快更长</text>
+            <text x="470" y="154" font-size="11" fill="#4b5570">· 少数派看到长链后倒戈切换</text>
+            <text x="470" y="176" font-size="11" fill="#4b5570">· 攻击者需 &gt;50% 算力才能逆转</text>
+            <text x="470" y="198" font-size="10.5" fill="#8a93ab">这就是"51% 攻击"门槛的来源</text>
+          </svg>
+        </div>
+        <p><b>扩展讲解：</b>Bitcoin 最深刻的地方在于：它<b>不需要知道参与者是谁，也不需要知道有多少人</b>。
+           它用"工作量证明"把"投票权"替换成了"算力"——算力越强，挖到下一个块的期望时间越短，
+           于是"最长链"就成了"多数算力认可的那条链"。</p>
+        <p>但要付出巨大代价：<b>交易确认慢</b>（10 分钟起步，高价值交易要等约 1 小时才有高置信度）、<b>吞吐极低</b>（约 5 笔/秒）、
+           而且<b>耗电惊人</b>。这是"完全去中心化"必须支付的成本——没有中心协调者，就只能靠"昂贵的计算"来达成共识。</p>
+        <div class="note-box nb-info"><span class="nb-ic">🔗</span><div><p><strong>与 SUNDR 的对照：</strong>两者都用"签名日志 + 哈希链接"，都把分叉视为核心威胁。区别在于 SUNDR 只能<b>检测</b>分叉（保证分叉无法被愈合），Bitcoin 则能<b>自动收敛</b>分叉。这是"有许可"与"无许可"世界的分野。</p></div></div>
+      </div>
+    </article>
+
+    <div class="note-box nb-key" style="margin-top:36px">
+      <span class="nb-ic">🧭</span>
+      <div><p><strong>接下来：</strong>概念清楚了，就去 <a href="papers.html">论文精讲</a> 看这些思想在真实系统里怎么落地，
+        或者去 <a href="labs.html">Lab 通关手册</a> 亲手把它们实现出来。</p></div>
+    </div>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="about"><h4>MIT 6.824 学习指南</h4><p>面向零基础初学者的分布式系统可视化学习站点，基于 MIT 6.824 / 6.5840 公开课程资料重新整理。</p></div>
+    <div><h4>本站导航</h4><ul><li><a href="index.html">首页</a></li><li><a href="papers.html">论文精讲</a></li><li><a href="labs.html">Lab 通关手册</a></li></ul></div>
+    <div><h4>官方资料</h4><ul>
+      <li><a href="https://pdos.csail.mit.edu/6.824/schedule.html" target="_blank" rel="noopener">课程主页 / Schedule</a></li>
+      <li><a href="https://pdos.csail.mit.edu/6.824/notes/" target="_blank" rel="noopener">Lecture Notes</a></li>
+    </ul></div>
+  </div>
+  <div class="footer-bottom"><span>本页为学习整理，版权归原始作者与 MIT PDOS 所有。</span><span>可视化笔记</span></div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

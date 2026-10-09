@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab 通关手册 · MIT 6.824 学习指南</title>
+<meta name="description" content="MIT 6.824 五个 Lab 的通关手册：设计目的、必备原理、Go 开发范式、代码结构与论文对应。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">
+      <span class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="5" cy="6" r="2.4" fill="#fff"/><circle cx="19" cy="6" r="2.4" fill="#fff"/><circle cx="12" cy="18" r="2.4" fill="#fff"/><path d="M5 6h14M5 6l7 12M19 6l-7 12" stroke="#fff" stroke-width="1.3" opacity=".8"/></svg></span>
+      <span>MIT 6.824 学习指南<small>Distributed Systems · 零基础可视化</small></span>
+    </a>
+    <button class="nav-toggle" aria-label="菜单"><span></span><span></span><span></span></button>
+    <nav class="nav-links">
+      <a class="nav-back" href="../../index.html">← 学习笔记</a>
+      <a href="index.html">首页</a>
+      <a href="papers.html">论文精讲</a>
+      <a href="labs.html">Lab 通关</a>
+      <a href="notes.html">可视化笔记</a>
+    </nav>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="side-title">开始之前</div>
+    <ul class="side-nav">
+      <li><a href="#overview">Lab 全景与依赖</a></li>
+      <li><a href="#principles">通用前置：分布式原理</a></li>
+      <li><a href="#go">通用前置：Go 开发范式</a></li>
+    </ul>
+    <div class="side-title">五个 Lab</div>
+    <ul class="side-nav">
+      <li><a href="#lab1">Lab 1 · MapReduce</a></li>
+      <li><a href="#lab2">Lab 2 · KV Server</a></li>
+      <li><a href="#lab3">Lab 3 · Raft</a></li>
+      <li><a href="#lab4">Lab 4 · KV Raft</a></li>
+      <li><a href="#lab5">Lab 5 · Sharded KV</a></li>
+    </ul>
+    <div class="side-title">实战建议</div>
+    <ul class="side-nav">
+      <li><a href="#debug">调试与心态</a></li>
+    </ul>
+  </aside>
+
+  <main class="content">
+    <div class="crumb"><a href="index.html">首页</a> / Lab 通关手册</div>
+    <div class="page-head">
+      <h1>Lab 通关手册</h1>
+      <p class="lede">官方 Lab 说明写得非常简洁——它默认你懂分布式原理、熟悉 Go 并发。这份手册反过来做：
+        <b>先从整体设计出发，把每个 Lab 的"设计目的"讲清楚</b>；<b>再把完成它所需的原理与 Go 范式补齐</b>；
+        最后针对 Lab 文档过于简略的地方，<b>直接引用原论文中的对应内容</b>来补充说明。</p>
+    </div>
+
+    <!-- 全景 -->
+    <section id="overview">
+      <h2>Lab 全景与依赖</h2>
+      <p>五个 Lab 是一条连续的工程主线，而不是五个孤立练习。后面的 Lab 会<b>复用前面写的代码</b>，
+         所以每一层都要写扎实——一个 Lab 3 的 bug 会在 Lab 4、5 里被无限放大。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Lab</th><th>主题</th><th>核心能力</th><th>难度</th><th>对应论文</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Lab 1</strong></td><td>MapReduce</td><td>并行任务调度、RPC、容错重试</td><td><span class="diff diff-mid">moderate/hard</span></td><td><a href="papers.html#mapreduce">MapReduce</a></td></tr>
+            <tr><td><strong>Lab 2</strong></td><td>Key/Value Server</td><td>线性一致性、至多一次语义、条件写</td><td><span class="diff diff-mid">easy→moderate</span></td><td><a href="papers.html#linearizability">Linearizability</a></td></tr>
+            <tr><td><strong>Lab 3</strong></td><td>Raft</td><td>共识、选举、日志、持久化、快照</td><td><span class="diff diff-hard">hard</span></td><td><a href="papers.html#raft">Raft</a></td></tr>
+            <tr><td><strong>Lab 4</strong></td><td>Fault-tolerant KV</td><td>复制状态机、重复检测、快照协作</td><td><span class="diff diff-hard">hard</span></td><td><a href="papers.html#raft">Raft §7–8</a></td></tr>
+            <tr><td><strong>Lab 5</strong></td><td>Sharded KV</td><td>分片、配置变更、容错控制器</td><td><span class="diff diff-hard">hard</span></td><td><a href="papers.html#spanner">Spanner</a> / <a href="papers.html#cr">Chain Replication</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note-box nb-warn">
+        <span class="nb-ic">⚠️</span>
+        <div><p><strong>课程组的硬性时间限制：</strong>Lab 3/4/5 的评分脚本要求<b>全部测试在 600 秒内跑完，且单个测试不超过 120 秒</b>。
+           这意味着"能通过"还不够——你的实现必须是高效的。常见的坑包括：循环里不加 sleep 导致空转、RPC 发得太频繁、日志回退一次只退一条。这些问题会在测试超时上暴露出来。</p></div>
+      </div>
+    </section>
+
+    <!-- 分布式原理 -->
+    <section id="principles">
+      <h2>通用前置：五个 Lab 都会用到的分布式原理</h2>
+      <p>在写任何代码之前，先把这几个概念装进脑子里。它们会在每个 Lab 里反复出现。</p>
+
+      <div class="acc" data-multi="1">
+        <div class="acc-item open">
+          <button class="acc-head">① 远程过程调用 RPC —— 一切通信的基础<span class="arw">›</span></button>
+          <div class="acc-body"><div class="acc-body-inner">
+            <p>RPC 让"调用另一台机器上的函数"看起来像本地调用。但它和本地调用有一个<b>本质区别</b>：你无法区分下面几种失败——</p>
+            <ul>
+              <li>请求根本没送到服务器；</li>
+              <li>服务器执行了，但在回复前崩了；</li>
+              <li>服务器执行并回复了，但回复在网络上丢了。</li>
+            </ul>
+            <p>客户端只能观察到"<b>没收到回复</b>"。这个不确定性是所有分布式难题的根源。Go 的 RPC 库是"至多一次"语义：
+               <b>它绝不自动重发请求</b>，收不到回复就返回错误。</p>
+            <div class="code-head"><span>Go RPC 调用的标准写法（Lab 1/2/4 通用）</span></div>
+            <pre><code>args := &PutArgs{Key: "x", Value: "1", Version: 0}
+reply := PutReply{}                 // 必须传"零值"的 reply！
+ok := ck.clnt.Call("KVServer.Put", args, &reply)
+if !ok {                            // false = 没收到回复（不是"服务器返回了错误"）
+    // 需要自己决定：重试？还是放弃？
+}
+// 注意：Go RPC 只序列化<b>首字母大写</b>的字段，子结构也必须大写</code></pre>
+            <p><b>关键陷阱：</b>调用前不要把 reply 的字段设成非零值，否则 RPC 库可能静默返回错误结果。每次调用都要用新的零值 reply。</p>
+          </div></div>
+        </div>
+
+        <div class="acc-item">
+          <button class="acc-head">② 复制状态机 RSM —— Lab 3/4/5 的理论骨架<span class="arw">›</span></button>
+          <div class="acc-body"><div class="acc-body-inner">
+            <p>如果多个副本从<b>相同的初始状态</b>出发，执行<b>相同顺序的、确定性的操作</b>，那么它们最终会到达<b>相同的状态</b>。
+               这就是复制状态机（Replicated State Machine）。</p>
+            <p>于是"让副本保持一致"这个问题，被转化成了"<b>让副本对操作顺序达成一致</b>"——而后者正是共识协议（Raft）要解决的。
+               这是整个 Lab 3→4→5 的设计主线：<b>Raft 负责定序，应用层负责执行</b>。</p>
+            <div class="note-box nb-key" style="margin:14px 0 0"><span class="nb-ic">🔑</span><div><p>这就是为什么 Raft 要维护一条"日志"：日志就是"操作顺序"的载体。领导者把操作追加到日志并复制给多数派，一旦提交，所有副本按同样顺序执行。</p></div></div>
+          </div></div>
+        </div>
+
+        <div class="acc-item">
+          <button class="acc-head">③ 多数派 Quorum —— 为什么是"一半以上"？<span class="arw">›</span></button>
+          <div class="acc-body"><div class="acc-body-inner">
+            <p>任意两个"多数派"必然相交，这是所有共识协议的数学基石。3 台机器中任意两个"2 台"的组合必然有交集；
+               5 台中任意两个"3 台"也必然有交集。这个交集保证了：<b>上一轮被多数派认可的信息，下一轮一定有人记得</b>。</p>
+            <p>推论：<b>2f+1 台机器可以容忍 f 台故障</b>。3 台容忍 1 台，5 台容忍 2 台。另外，"多数派"是相对于<b>全部服务器</b>计算的，不是相对于"活着的服务器"。</p>
+          </div></div>
+        </div>
+
+        <div class="acc-item">
+          <button class="acc-head">④ 幂等 / 确定性 —— 容错的前提<span class="arw">›</span></button>
+          <div class="acc-body"><div class="acc-body-inner">
+            <p>MapReduce 的重跑、Raft 的日志重放、客户端 RPC 的重传——都会导致"<b>同一个操作被执行多次</b>"。
+               如果操作不是幂等的，多次执行就会出错。</p>
+            <p>两类处理方式：<b>① 让操作本身幂等</b>（比如 Map/Reduce 是纯函数，重跑结果一样）；
+               <b>② 用唯一标识去重</b>（服务器记住"这个请求我已经处理过了"，重复请求直接返回上次的结果）。Lab 2 的版本号、Lab 4 的请求 ID 都是后者。</p>
+          </div></div>
+        </div>
+
+        <div class="acc-item">
+          <button class="acc-head">⑤ 超时与心跳 —— 检测故障的唯一手段<span class="arw">›</span></button>
+          <div class="acc-body"><div class="acc-body-inner">
+            <p>你无法直接知道"对方死了"，只能通过"<b>一段时间没收到消息</b>"来<b>猜测</b>对方死了。
+               这就带来一对矛盾：超时太短会误判（把慢当成死），太长则恢复迟钝。Lab 1 要求 10 秒，Lab 3 要求选举超时在合理范围内。</p>
+            <p><b>重要认知：</b>"故障检测器"永远可能出错，但分布式系统依然工作，因为<b>所有节点都服从同一个（可能出错的）判断</b>。
+               一致性比"判断正确"更重要——这是避免脑裂的关键哲学。</p>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Go -->
+    <section id="go">
+      <h2>通用前置：Go 开发范式（Lab 必备）</h2>
+      <p>Go 上手很快，但它的并发模型需要一点思维转变。下面这些是五个 Lab 里你一定会用到的模式。</p>
+
+      <h3 style="margin-top:28px">1. goroutine：把"等待"变成并发</h3>
+      <p>在函数调用前加一个 <code>go</code>，它就在一个新线程（goroutine）里异步执行。Lab 里到处都需要它：
+         服务器要同时处理多个请求、Raft 要同时发心跳和收消息、MapReduce 要并行跑任务。</p>
+      <div class="code-head"><span>goroutine 与竞态</span></div>
+      <pre><code>// 顺序执行：慢，一次只能做一件事
+fetch(url1); fetch(url2)
+
+// 并发执行：快，但要小心共享数据
+go fetch(url1)
+go fetch(url2)
+
+// 危险：两个 goroutine 同时改 n，结果不确定 —— 这叫"竞态(race)"
+// 必须用锁保护，或避免共享可变数据</code></pre>
+      <div class="note-box nb-tip"><span class="nb-ic">🛡️</span><div><p><strong>救命工具：</strong>永远用 <code>go test -race</code> 跑测试。它能检测出"结果碰巧正确、但存在竞态"的代码。Lab 里 90% 的诡异 bug 都靠它定位。</p></div></div>
+
+      <h3 style="margin-top:28px">2. sync.Mutex：保护共享状态</h3>
+      <p>Raft 的状态、KV 服务器的表、MapReduce 协调者的任务表，都是被多个 goroutine 共享的。<b>任何一次读写都必须持锁</b>。</p>
+      <div class="code-head"><span>锁的正确用法（Lab 3 Raft 的核心模式）</span></div>
+      <pre><code>type Raft struct {
+    mu        sync.Mutex    // 保护所有共享字段
+    currentTerm int
+    votedFor    int
+    log         []LogEntry
+}
+
+func (rf *Raft) GetState() (int, bool) {
+    rf.mu.Lock()
+    defer rf.mu.Unlock()     // defer 保证一定解锁，即使中途 return
+    return rf.currentTerm, rf.state == Leader
+}
+
+// 铁律：不要在持锁时做耗时操作（如 RPC、磁盘 IO）
+//      也不要持锁时向 channel 发送（可能阻塞）
+//      正确做法：持锁时把需要的数据拷出来，解锁后再做耗时操作</code></pre>
+
+      <h3 style="margin-top:28px">3. sync.Cond：等待某个条件成立</h3>
+      <p>Lab 1 的"reduce 要等所有 map 完成"、Lab 4 的"提交要等日志被应用"，都需要"等待条件成立"。
+         <code>time.Sleep</code> 轮询虽然能work但很浪费，<code>sync.Cond</code> 才是正解。</p>
+      <div class="code-head"><span>条件变量（Lab 1 / Lab 4 通用）</span></div>
+      <pre><code>cond := sync.NewCond(&mu)
+
+// 等待方：必须用 for 循环包裹 Wait()，防止虚假唤醒
+mu.Lock()
+for !conditionMet() {
+    cond.Wait()      // 内部会释放锁并阻塞，被唤醒后重新加锁
+}
+mu.Unlock()
+
+// 通知方：改变了条件后，唤醒等待者
+mu.Lock()
+changeState()
+cond.Broadcast()     // 或 cond.Signal() 唤醒一个
+mu.Unlock()</code></pre>
+
+      <h3 style="margin-top:28px">4. channel：在 goroutine 之间传递数据</h3>
+      <p>Lab 3 的 <code>applyCh</code>、Lab 4 的提交结果传递，都用 channel。<b>channel 同时完成"传值"和"同步"</b>：
+         发送方会阻塞直到接收方收到。</p>
+      <div class="code-head"><span>channel 的两种用法</span></div>
+      <pre><code>ch := make(chan int)        // 无缓冲：发送方阻塞直到有人接收
+ch := make(chan int, 10)    // 有缓冲：缓冲区满之前不阻塞
+
+go func() { ch &lt;- 42 }()     // 发送
+v := &lt;-ch                    // 接收（会阻塞直到有值）
+
+close(ch)                    // 关闭后，range 会自然结束
+for v := range ch { ... }</code></pre>
+      <div class="note-box nb-info"><span class="nb-ic">🧭</span><div><p><strong>何时用锁、何时用 channel？</strong>课程建议：<b>对于共享状态，优先用 <code>sync.Mutex</code>/<code>sync.Cond</code></b>；
+         对于"传递所有权/通知事件"，用 channel。Raft 这种有大量共享状态的结构，用锁更自然。</p></div></div>
+
+      <h3 style="margin-top:28px">5. 定时器：不要用 time.Timer/Ticker</h3>
+      <p>Lab 3 的说明里特别强调：<b>用 <code>time.Sleep</code> 的循环来实现周期性动作，别用 <code>time.Timer</code>/<code>time.Ticker</code></b>——后者在并发场景下极难用对。</p>
+      <div class="code-head"><span>Raft 的 ticker 模式</span></div>
+      <pre><code>func (rf *Raft) ticker() {
+    for !rf.killed() {
+        // 检查是否该发起选举（用随机超时避免选票分裂）
+        rf.mu.Lock()
+        if time.Now().After(rf.electionDeadline) {
+            rf.startElection()
+        }
+        rf.mu.Unlock()
+        time.Sleep(10 * time.Millisecond)   // 别空转！
+    }
+}</code></pre>
+
+      <h3 style="margin-top:28px">6. 其他必备工具</h3>
+      <div class="grid grid-2">
+        <div class="card"><h3>插件 plugin（Lab 1）</h3><p style="margin-top:6px">Map/Reduce 函数以 <code>.so</code> 插件形式在运行时加载：
+          <code>go build -buildmode=plugin ../mrapps/wc.go</code>。改了 <code>mr/</code> 目录后要重新构建插件。</p></div>
+        <div class="card"><h3>labgob 序列化（Lab 3）</h3><p style="margin-top:6px">持久化状态时用 <code>labgob</code> 编码。它会在你用了<b>小写字段名</b>时报警——因为 RPC 只传大写字段，忽略警告会导致数据丢失。</p></div>
+        <div class="card"><h3>testing 与 -race（全部）</h3><p style="margin-top:6px"><code>make RUN="-run 3A" raft1</code> 可以只跑某个测试。评分时不带 <code>-race</code>，但你自己一定要带。</p></div>
+        <div class="card"><h3>labrpc（Lab 3/4/5）</h3><p style="margin-top:6px">测试用的模拟网络，可以<b>延迟、乱序、丢弃</b> RPC。你的代码必须与原始 labrpc 配合，不能改它来"作弊"。</p></div>
+      </div>
+    </section>
+
+    <!-- ================= Lab 1 ================= -->
+    <h2 id="lab1" style="margin-top:56px;scroll-margin-top:90px">Lab 1 · MapReduce <span class="diff diff-mid">moderate/hard</span></h2>
+    <p>这是唯一一个"从零搭建并行框架"的 Lab，也是理解"分布式系统如何隐藏复杂性"的最好入口。</p>
+
+    <div class="h-label k-idea"><span class="dot"></span>设计目的</div>
+    <p>亲手实现 <a href="papers.html#mapreduce">MapReduce</a> 论文里的架构：一个 <b>coordinator</b>（论文中叫 master）负责分发任务，
+       多个 <b>worker</b> 并行执行 Map/Reduce，通过 RPC 通信。你会亲自体会到三件事：
+       ① 并行任务如何切分与调度；② 如何在"worker 会崩溃"的前提下保证结果正确；③ 为什么 Map/Reduce 必须是确定性纯函数。</p>
+
+    <div class="h-label k-deep"><span class="dot"></span>必备原理</div>
+    <ul>
+      <li><b>任务与分片：</b>每个输入文件对应一个 Map 任务；中间键按 <code>hash(key) % nReduce</code> 分成 nReduce 个桶，对应 nReduce 个 Reduce 任务。</li>
+      <li><b>Shuffle（洗牌）：</b>Reduce 任务要从<b>每一个</b> Map 任务那里拉取属于自己桶的中间数据。这是全流程最耗网络的一步。</li>
+      <li><b>容错 = 重跑 + 原子提交：</b>coordinator 超时（本 Lab 用 10 秒）后认为 worker 已死，把任务重新派给别的 worker。为防止读者看到写了一半的文件，必须"写临时文件 → 原子重命名"。</li>
+      <li><b>心跳与任务状态：</b>coordinator 需维护每个任务的状态（未开始/进行中/已完成），并用时间戳判断是否超时。</li>
+    </ul>
+
+    <div class="h-label k-diff"><span class="dot"></span>代码结构</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>文件</th><th>作用</th><th>你要做什么</th></tr></thead>
+        <tbody>
+          <tr><td><code>mr/coordinator.go</code></td><td>协调者：分发任务、跟踪状态、处理超时</td><td><b>主要工作</b>：实现 <code>GetTask</code>、<code>ReportTask</code>、<code>Done</code></td></tr>
+          <tr><td><code>mr/worker.go</code></td><td>工作者：循环领任务、执行、汇报</td><td><b>主要工作</b>：实现 <code>Worker</code> 主循环</td></tr>
+          <tr><td><code>mr/rpc.go</code></td><td>RPC 参数与回复结构定义</td><td>按需扩展</td></tr>
+          <tr><td><code>main/mrcoordinator.go</code>、<code>main/mrworker.go</code></td><td>程序入口</td><td><b>不要修改</b></td></tr>
+          <tr><td><code>mrapps/wc.go</code>、<code>mrapps/indexer.go</code></td><td>示例应用（词频统计、倒排索引）</td><td>参考即可</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="h-label k-trade"><span class="dot"></span>原论文对应内容（Lab 文档太简略，看这里）</div>
+    <div class="note-box nb-info"><span class="nb-ic">📄</span><div>
+      <p><strong>原子重命名：</strong>论文 §3.4 明确提到这个技巧——"当 Reduce 任务完成时，它把临时文件原子地重命名为最终输出文件"。这正是 Lab 里 <code>os.Rename</code> 的出处，用来防止崩溃时留下半成品。</p>
+      <p><strong>备份任务（Backup Tasks）：</strong>论文 §3.6 讨论了"掉队者（straggler）"问题——某台机器因为磁盘/网络问题特别慢，会拖垮整个作业。
+        解法是对最后几个未完成的任务<b>启动备份执行</b>，谁先完成用谁的结果。Lab 文档提到："如果实现备份任务，注意只有在等待足够长时间（如 10 秒）后才能启动，否则会调度多余任务。"</p>
+      <p><strong>确定性要求：</strong>论文 §3.1 强调 Map/Reduce 必须是确定性的纯函数，否则"重跑"会导致不同 Reduce 看到同一个 Map 的不同输出。</p>
+    </div></div>
+
+    <div class="h-label k-deep"><span class="dot"></span>新手提示</div>
+    <ul>
+      <li>中间文件名建议用 <code>mr-X-Y</code>（X = Map 任务号，Y = Reduce 桶号），Reduce 任务读取时遍历所有 X。</li>
+      <li>中间数据用 <code>encoding/json</code> 存取即可，论文没有规定格式。</li>
+      <li>coordinator 是并发的 RPC 服务器，<b>所有共享状态都要加锁</b>。</li>
+      <li>worker 退出的一种简单办法：如果 <code>call()</code> 返回 false，就假定 coordinator 已退出（任务全部完成），自己也退出。</li>
+      <li>用 <code>mrapps/crash.go</code> 插件来测试崩溃恢复。</li>
+    </ul>
+
+    <!-- ================= Lab 2 ================= -->
+    <h2 id="lab2" style="margin-top:56px;scroll-margin-top:90px">Lab 2 · Key/Value Server <span class="diff diff-easy">easy → moderate</span></h2>
+    <p>Lab 2 是"最容易被低估"的一个：代码量不大，但它是理解<a href="papers.html#linearizability">线性一致性</a>和"至多一次语义"的最佳场所。</p>
+
+    <div class="h-label k-idea"><span class="dot"></span>设计目的</div>
+    <p>构建一个<b>单机</b> KV 服务器，但要在<b>网络会丢包</b>的前提下，保证每个 Put 操作<b>至多执行一次</b>，
+       并且整体行为是<b>线性一致</b>的。然后用这个 KV 服务器实现一个分布式锁。它为 Lab 4（用 Raft 复制这个服务器）打基础。</p>
+
+    <div class="h-label k-deep"><span class="dot"></span>必备原理</div>
+    <ul>
+      <li><b>版本号与条件写：</b><code>Put(key, value, version)</code> 只有当传入的 version 等于服务器当前版本时才成功，并让版本加一。
+          version=0 表示"创建新键"。这是"<b>比较并交换（CAS）</b>"思想的体现。</li>
+      <li><b>至多一次语义（at-most-once）：</b>网络可能丢请求，也可能丢回复。客户端必须重试，但重试可能导致服务器收到重复请求。
+          对 Put 而言，因为它是"条件写"，重复的 Put 会被版本号挡掉（返回 <code>ErrVersion</code>）。</li>
+      <li><b>ErrMaybe 的微妙之处：</b>如果客户端重传后收到 <code>ErrVersion</code>，它<b>无法确定</b>到底是"自己第一次的 Put 已经成功、只是回复丢了"，
+          还是"别人先改了、自己两次都没执行"。所以此时必须返回 <code>ErrMaybe</code>（"可能执行了，也可能没有"），由上层处理。</li>
+    </ul>
+
+    <div class="h-label k-diff"><span class="dot"></span>代码结构</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>文件</th><th>作用</th><th>你要做什么</th></tr></thead>
+        <tbody>
+          <tr><td><code>kvsrv1/client.go</code></td><td>Clerk：客户端的 Put/Get 封装</td><td>实现 RPC 发送 + 重试逻辑</td></tr>
+          <tr><td><code>kvsrv1/server.go</code></td><td>服务器：Put/Get 处理函数</td><td>实现版本号语义</td></tr>
+          <tr><td><code>kvsrv1/rpc/rpc.go</code></td><td>RPC 结构定义</td><td>不用改，但要读懂</td></tr>
+          <tr><td><code>kvsrv1/lock/lock.go</code></td><td>用 KV 实现分布式锁</td><td>实现 Acquire/Release</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="h-label k-trade"><span class="dot"></span>原论文对应内容</div>
+    <div class="note-box nb-info"><span class="nb-ic">📄</span><div>
+      <p><strong>线性一致性定义：</strong>见 <a href="papers.html#linearizability">Linearizability 论文</a>。Lab 的目标就是让 <code>Clerk.Get/Put</code> 从客户端视角看是线性一致的。</p>
+      <p><strong>重复请求问题：</strong>线性一致性论文里的"例 6"正好说明了为什么"网络重传导致同一请求执行两次"会破坏线性一致性——这正是 Lab 要求 Put 至多一次的原因。</p>
+      <p><strong>版本号方案：</strong>这个"用版本号做条件写"的做法，与 <a href="papers.html#zookeeper">ZooKeeper</a> 的 <code>setData(path, data, version)</code> 完全一致，也是 Chain Replication 论文里提到的"给 put 加版本号"的重复检测方案。</p>
+    </div></div>
+
+    <div class="h-label k-deep"><span class="dot"></span>新手提示</div>
+    <ul>
+      <li>实现锁时，需要为每个锁客户端生成唯一 ID：<code>kvtest.RandValue(8)</code>。</li>
+      <li>重试之间要 <code>time.Sleep(100 * time.Millisecond)</code>，别死循环猛发。</li>
+      <li>服务器端<b>不需要</b>为了不可靠网络做任何修改——一切重试都在客户端。</li>
+    </ul>
+
+    <!-- ================= Lab 3 ================= -->
+    <h2 id="lab3" style="margin-top:56px;scroll-margin-top:90px">Lab 3 · Raft <span class="diff diff-hard">hard</span></h2>
+    <p>全课程最核心、也最难的 Lab。它分四部分，<b>必须按顺序完成</b>——后面的部分依赖前面的正确性。</p>
+
+    <div class="h-label k-idea"><span class="dot"></span>设计目的</div>
+    <p>实现 <a href="papers.html#raft">Raft</a> 共识协议，作为可复用的模块，供后续 Lab 构建容错的 KV 服务。
+       它要让一群机器"看起来像一台机器"：客户端请求被排成一个序列（日志），所有副本看到相同的日志、以相同顺序执行。</p>
+
+    <div class="h-label k-deep"><span class="dot"></span>必备原理（按部分拆解）</div>
+    <div class="tabs">
+      <div class="tab-bar">
+        <button class="tab-btn active">3A 领导者选举</button>
+        <button class="tab-btn">3B 日志复制</button>
+        <button class="tab-btn">3C 持久化</button>
+        <button class="tab-btn">3D 日志压缩</button>
+      </div>
+      <div class="tab-panel active">
+        <p><b>目标：</b>选出唯一的领导者，并在无故障时保持、在领导者故障时重新选出。</p>
+        <ul>
+          <li><b>任期（Term）：</b>逻辑时钟，每选举一次递增。一个任期至多一个领导者。</li>
+          <li><b>选举机制：</b>节点在"选举超时"内没收到领导者心跳，就自增任期、转为候选者、给自己投票并向所有人拉票；获得多数派即当选。</li>
+          <li><b>随机化超时：</b>给每个节点的超时加随机抖动，避免选票分裂。论文建议 150–300ms，但<b>本 Lab 因心跳频率限制（每秒最多 10 次），需要更大的超时</b>。</li>
+          <li><b>心跳：</b>领导者周期性发送空的 AppendEntries 来宣示主权、压制新选举。</li>
+        </ul>
+        <div class="note-box nb-warn" style="margin-top:14px"><span class="nb-ic">⚠️</span><div><p>测试要求：领导者每秒心跳<b>不超过 10 次</b>；旧领导者故障后<b>5 秒内</b>必须选出新领导者。这两个约束共同决定了你的超时取值范围。</p></div></div>
+      </div>
+      <div class="tab-panel">
+        <p><b>目标：</b>领导者能追加新日志并复制到多数派，从而提交。</p>
+        <ul>
+          <li><b>索引从 0 开始：</b>建议在 index=0 放一个 dummy 条目（term=0），这样第一条 AppendEntries 的 PrevLogIndex 可以是 0，永远合法。</li>
+          <li><b>一致性检查：</b>AppendEntries 携带 <code>PrevLogIndex</code> 和 <code>PrevLogTerm</code>，追随者只有匹配才接受。</li>
+          <li><b>提交规则：</b>领导者只有在<b>当前任期</b>的条目被复制到多数派后，才能推进 commitIndex（这是 Figure 8 的教训）。</li>
+          <li><b>选举限制：</b>只有"日志至少一样新"的候选者才能获得投票——保证新领导者拥有所有已提交条目。</li>
+          <li><b>性能：</b>循环里要加 sleep 或条件变量，不能空转，否则会因超时失败。</li>
+        </ul>
+      </div>
+      <div class="tab-panel">
+        <p><b>目标：</b>服务器重启后能恢复状态，继续服务。</p>
+        <ul>
+          <li><b>需要持久化的状态（Figure 2）：</b><code>log[]</code>、<code>currentTerm</code>、<code>votedFor</code>。</li>
+          <li><b>为什么是这三样？</b>log 防止已提交条目丢失；votedFor 防止同一任期投两次票；currentTerm 防止跟随过期的领导者。</li>
+          <li><b>不必持久化：</b><code>commitIndex</code>、<code>lastApplied</code>、<code>nextIndex[]</code>——它们是易失的，重启后重新推导即可。</li>
+          <li><b>快速回退优化：</b>Figure 2 的"一次退一条"太慢。论文 §5.3 末尾给出方案：拒绝消息里带上 <code>XTerm/XIndex/XLen</code>，领导者据此一次跳过整个冲突任期。</li>
+        </ul>
+      </div>
+      <div class="tab-panel">
+        <p><b>目标：</b>让日志不会无限增长，并支持把快照发给落后太多的追随者。</p>
+        <ul>
+          <li><b>快照：</b>服务层周期性调用 <code>Snapshot(index, data)</code>，Raft 丢弃 index 之前的日志。</li>
+          <li><b>InstallSnapshot RPC：</b>当领导者需要的日志已被丢弃时，改为发送整个快照（本 Lab 要求一次发完，不实现分片 offset 机制）。</li>
+          <li><b>持久化快照：</b>用 <code>persister.Save(state, snapshot)</code> 的第二个参数保存快照；重启时要 <code>ReadSnapshot()</code> 恢复。</li>
+          <li><b>内存回收：</b>丢弃日志时要确保没有指针指向旧条目，否则 Go 的 GC 无法回收内存。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="h-label k-diff"><span class="dot"></span>代码结构</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>文件</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td><code>raft1/raft.go</code></td><td><b>你唯一需要修改的文件</b>。骨架已给出 RPC 发送/接收示例</td></tr>
+          <tr><td><code>raftapi/raftapi.go</code></td><td>对外接口定义：<code>Make</code>、<code>Start</code>、<code>GetState</code>、<code>ApplyMsg</code>、<code>Snapshot</code></td></tr>
+          <tr><td><code>tester1/persister.go</code></td><td>持久化对象，提供 <code>ReadRaftState</code>/<code>Save</code>/<code>ReadSnapshot</code></td></tr>
+          <tr><td><code>labrpc/</code></td><td>模拟网络（可延迟/乱序/丢弃），<b>不可修改</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note-box nb-info"><span class="nb-ic">🧩</span><div><p><strong>核心接口：</strong><code>Start(cmd)</code> 由服务层调用以追加命令，<b>立即返回</b>不等待；<code>ApplyMsg</code> 通过 <code>applyCh</code> 通知服务层"某条日志已提交、可以执行了"。这就是 Lab 4 的接入点。</p></div></div>
+
+    <div class="h-label k-trade"><span class="dot"></span>原论文对应内容（关键补充）</div>
+    <div class="note-box nb-info"><span class="nb-ic">📄</span><div>
+      <p><strong>Figure 2 是唯一权威：</strong>论文的 Figure 2 是一张"状态 + 规则"总表，包含所有你需要的行为。Lab 说明明确要求"特别注意 Figure 2"。建议把它打印出来逐条对照实现。</p>
+      <p><strong>Figure 8 的教训：</strong>论文用 Figure 8 说明"为什么领导者不能仅凭旧任期条目被复制到多数派就提交它"。3C 测试里有专门的 <code>TestFigure83C</code>。</p>
+      <p><strong>日志压缩：</strong>论文 §7 描述了快照与 InstallSnapshot 的整体方案，但"故意不给出细节"（论文原话是细节留待实现者设计）。这就是 Lab 3D 需要你自己设计的地方。</p>
+      <p><strong>只读操作：</strong>论文 §8 讨论了"领导者能否不经过日志直接回复 Get"。结论是：在 Figure 2 的方案下<b>不能</b>，因为领导者可能已经失去领导权却不自知，会返回过期数据。Lab 4 要求把 Get 也走日志（不实现租约优化）。</p>
+    </div></div>
+
+    <div class="h-label k-deep"><span class="dot"></span>新手提示</div>
+    <ul>
+      <li>失败时测试器会生成一个<b>时间线可视化 HTML</b>，标出网络分区、崩溃、检查点，非常有用。</li>
+      <li>可以用 <code>tester.Annotate("Server 0", "描述", "详情")</code> 添加自己的标注。</li>
+      <li>先跑 3A，全过再写 3B；3C 的失败往往是 3A/3B 的 bug 暴露。</li>
+      <li>总时间预算：Lab 3 全部测试（不带 race）约 6 分钟，带 race 约 10 分钟。</li>
+    </ul>
+
+    <!-- ================= Lab 4 ================= -->
+    <h2 id="lab4" style="margin-top:56px;scroll-margin-top:90px">Lab 4 · Fault-tolerant Key/Value Service <span class="diff diff-hard">hard</span></h2>
+    <p>把 Lab 2 的 KV 服务器和 Lab 3 的 Raft 组合起来，得到一个<b>容错的、线性一致的</b>KV 服务。分三部分。</p>
+
+    <div class="h-label k-idea"><span class="dot"></span>设计目的</div>
+    <p>实现一个"<b>复制状态机（RSM）</b>"包 <code>rsm</code>，它夹在服务层和 Raft 之间：
+       服务层调用 <code>rsm.Submit(op)</code>，rsm 内部调用 <code>raft.Start()</code> 并等待结果；
+       Raft 提交后通过 <code>applyCh</code> 通知 rsm，rsm 把操作交给服务层的 <code>DoOp()</code> 执行，再把结果返回给最初调用的 goroutine。
+       这个 <code>rsm</code> 会被 Lab 5 复用。</p>
+
+    <div class="h-label k-deep"><span class="dot"></span>必备原理</div>
+    <div class="tabs">
+      <div class="tab-bar">
+        <button class="tab-btn active">4A 复制状态机</button>
+        <button class="tab-btn">4B KV 服务</button>
+        <button class="tab-btn">4C 快照</button>
+      </div>
+      <div class="tab-panel active">
+        <p>核心是<b>匹配"提交的操作"与"等待的 Submit 调用"</b>：Submit 给每个操作包一个唯一 ID，reader goroutine 收到 applyCh 消息后，用 ID 找到对应的等待者，把 <code>DoOp()</code> 的结果交给它。</p>
+        <ul>
+          <li><b>关键难点：领导者中途失去领导权。</b>Submit 调用了 <code>Start()</code>，但操作还没提交时领导者就下台了——这个操作永远不会有结果。</li>
+          <li><b>检测方法：</b>观察 Raft 的任期是否改变，或 <code>Start()</code> 返回的 index 处出现了别的操作。检测到就返回 <code>ErrWrongLeader</code>。</li>
+          <li>如果旧领导者被单独分区，它永远不知道新领导者存在——但同一个分区里的客户端也连不上新领导者，所以"无限等待"是可以接受的。</li>
+        </ul>
+      </div>
+      <div class="tab-panel">
+        <p>用 rsm 复制一个 KV 服务器：客户端把 Put/Get 发给<b>当前领导者</b>对应的 kvserver，服务器通过 <code>rsm.Submit</code> 把操作写入 Raft 日志，各副本在 <code>DoOp</code> 里执行。</p>
+        <ul>
+          <li><b>Get 也要走日志：</b>如果服务器不在多数派中，就<b>不能</b>回复 Get（否则可能返回过期数据）。最简单正确的做法是让每个 Get 也经过 Submit（不做论文 §8 的只读优化）。</li>
+          <li><b>客户端重试：</b>客户端不知道谁是领导者，发错了就换一台重试。建议客户端<b>记住上次成功的服务器</b>，下次优先发给它。</li>
+          <li><b>至多一次：</b>同一个 Put 可能被重传多次，必须保证只执行一次（复用 Lab 2 的思路）。</li>
+        </ul>
+      </div>
+      <div class="tab-panel">
+        <p>让 KV 服务器周期性调用 Raft 的 <code>Snapshot()</code>，以限制持久化 Raft 状态的大小。</p>
+        <ul>
+          <li><b>触发条件：</b>比较 <code>rf.PersistBytes()</code> 与 <code>maxraftstate</code>（测试器传入）。<code>maxraftstate = -1</code> 表示不需要快照。</li>
+          <li><b>快照内容：</b>不只是 KV 表，还要包含"用于去重的客户端请求记录"——否则重启后可能重复执行请求。</li>
+          <li><b>重启恢复：</b>rsm 重启时用 <code>persister.ReadSnapshot()</code> 读取快照，若非空则调用 <code>StateMachine.Restore()</code>。</li>
+          <li><b>注意：</b>快照里所有结构体字段必须<b>首字母大写</b>。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="h-label k-diff"><span class="dot"></span>代码结构</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>文件</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td><code>kvraft1/rsm/rsm.go</code></td><td><b>核心</b>：实现 <code>Submit()</code> 和 reader goroutine</td></tr>
+          <tr><td><code>kvraft1/client.go</code></td><td>Clerk：可复用 Lab 2 的客户端代码，增加"找领导者"逻辑</td></tr>
+          <tr><td><code>kvraft1/server.go</code></td><td>实现 Put/Get 处理函数、<code>DoOp</code>、<code>Snapshot</code>、<code>Restore</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="h-label k-trade"><span class="dot"></span>原论文对应内容</div>
+    <div class="note-box nb-info"><span class="nb-ic">📄</span><div>
+      <p><strong>论文 §8（客户端交互）：</strong>讨论了客户端如何找到领导者、如何处理重复请求。核心结论是"客户端请求必须携带唯一标识，服务器要记住每个客户端最近一次的响应，重复请求直接返回缓存的结果"。</p>
+      <p><strong>论文 §7（快照）：</strong>给出了服务层与 Raft 协作快照的整体框架。</p>
+      <p>Lab 说明还建议参考 Chubby、Paxos Made Live、Spanner、ZooKeeper、Harp、Viewstamped Replication 等系统——它们都面对同样的"如何让客户端与复制状态机正确交互"问题。</p>
+    </div></div>
+
+    <div class="h-label k-deep"><span class="dot"></span>新手提示</div>
+    <ul>
+      <li><b>从第一天就加锁</b>：Lab 说明明确建议"最好一开始就加锁，因为避免死锁的需求有时会影响整体代码设计"。</li>
+      <li>测试默认带 race 检测器运行。</li>
+      <li>4C 可能会暴露你在 Raft 或 rsm 里的隐藏 bug——改了 Raft 后务必重跑 Lab 3 的全部测试。</li>
+    </ul>
+
+    <!-- ================= Lab 5 ================= -->
+    <h2 id="lab5" style="margin-top:56px;scroll-margin-top:90px">Lab 5 · Sharded Key/Value Service <span class="diff diff-hard">hard</span></h2>
+    <p>全课程的收尾大 Lab，也是"把前面所有东西拼成一个真实分布式系统"的一步。</p>
+
+    <div class="h-label k-idea"><span class="dot"></span>设计目的</div>
+    <p>把数据<b>分片（shard）</b>到多个 Raft 复制组（shardgrp）上，从而让吞吐量随组数线性增长。
+       难点在于：<b>分片会移动</b>（有的组负载重、有的组要下线维护），而移动过程中必须保证 KV 操作仍然线性一致，
+       还要能从"控制器崩溃/被分区"中恢复。</p>
+
+    <div class="h-label k-deep"><span class="dot"></span>必备原理</div>
+    <ul>
+      <li><b>配置（Configuration）：</b>一张"分片号 → 组号"的映射表，每个配置有唯一编号 <code>Num</code>。存在 Lab 2 的 kvsrv 里。</li>
+      <li><b>控制器（Controller）：</b>管理员用它来增删 shardgrp、调整分片归属。<code>ChangeConfigTo</code> 负责执行一次配置变更。</li>
+      <li><b>分片迁移三步曲：</b><code>FreezeShard</code>（冻结源组，拒绝该分片的写）→ <code>InstallShard</code>（把数据复制到目标组）→ <code>DeleteShard</code>（删除源组的冻结分片），最后发布新配置。<b>好处是组与组之间不需要直接通信。</b></li>
+      <li><b>版本栅栏（Fencing）：</b>网络会乱序，旧 RPC 可能迟到。每个 Freeze/Install/Delete RPC 都带 <code>Num</code>，shardgrp 记住见过的最大 Num，拒绝过期的 RPC。</li>
+      <li><b>ErrWrongGroup：</b>如果 shardgrp 收到不属于自己分片的请求，返回该错误；客户端重新读配置并重试。</li>
+      <li><b>并发控制器：</b>用 kvsrv 的<b>版本化 Put</b> 保证"只有一个控制器能提交下一个配置"。</li>
+    </ul>
+
+    <div class="h-label k-diff"><span class="dot"></span>代码结构</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>文件</th><th>作用</th><th>你要做什么</th></tr></thead>
+        <tbody>
+          <tr><td><code>shardkv1/client.go</code></td><td>整体系统的 Clerk</td><td>实现 Put/Get：先 Query 查配置定位 shardgrp，再转发</td></tr>
+          <tr><td><code>shardkv1/shardctrler/shardctrler.go</code></td><td>控制器</td><td>实现 <code>InitConfig</code>、<code>Query</code>、<code>ChangeConfigTo</code>、<code>InitController</code></td></tr>
+          <tr><td><code>shardkv1/shardgrp/server.go</code></td><td>分片组服务器</td><td>从 Lab 4 复制并扩展：加 Freeze/Install/Delete</td></tr>
+          <tr><td><code>shardkv1/shardgrp/client.go</code></td><td>分片组 Clerk</td><td>实现 shardgrp 级别的 RPC</td></tr>
+          <tr><td><code>shardkv1/shardcfg/</code></td><td>配置的数据结构与工具</td><td>用 <code>Key2Shard</code>、<code>GidServers</code>、<code>String</code>/<code>FromString</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="h-label k-trade"><span class="dot"></span>原论文对应内容</div>
+    <div class="note-box nb-info"><span class="nb-ic">📄</span><div>
+      <p>Lab 说明明确指出，这个分片 KV 的设计与 <b>Flat Datacenter Storage、BigTable、Spanner、FAWN、Apache HBase、Rosebud、Spinnaker</b> 等一系列系统"遵循相同的总体设计"。建议对照阅读：</p>
+      <ul>
+        <li><a href="papers.html#spanner">Spanner</a>：分片 + Paxos 复制 + 配置管理，是 Lab 5 的"豪华版"。</li>
+        <li><a href="papers.html#gfs">GFS</a>：同样用"中心 Master 管元数据 + 分块数据"的分层结构。</li>
+        <li><a href="papers.html#cr">Chain Replication</a>：其中关于"分片在多个服务器组上如何布局以获得负载均衡与快速修复"的讨论（§5.2–5.4），对理解 Lab 5 的分片思路很有帮助。</li>
+        <li><a href="papers.html#zookeeper">ZooKeeper</a>：现实中常用 ZK 来存配置、做选主，与 Lab 5 用 kvsrv 存配置异曲同工。</li>
+      </ul>
+    </div></div>
+
+    <div class="h-label k-deep"><span class="dot"></span>分部分要点</div>
+    <div class="acc" data-multi="1">
+      <div class="acc-item open"><button class="acc-head">5A · 分片迁移（无故障）<span class="arw">›</span></button>
+        <div class="acc-body"><div class="acc-body-inner"><p>实现 shardgrp、配置的读写（存在 kvsrv 里）、以及 Freeze/Install/Delete。
+          要点：用 <code>shardcfg.Key2Shard()</code> 算键的分片号；第一个组 <code>Gid1</code> 初始化时拥有所有分片；
+          迁移时要支持"不影响其他分片继续服务"。注意：如果 RPC 回复里包含服务器状态的 map，必须<b>拷贝一份</b>再返回，否则会和并发的修改产生竞态。</p></div></div></div>
+      <div class="acc-item"><button class="acc-head">5B · 处理失败的控制器<span class="arw">›</span></button>
+        <div class="acc-body"><div class="acc-body-inner"><p>控制器是"短命命令"：它执行完就退出，但可能在执行中崩溃/被分区。
+          解法是<b>同时保存"当前配置"和"下一个配置"</b>：开始变更时先写"下一个配置"，全部完成后才把它提升为"当前配置"。
+          <code>InitController</code> 启动时先检查是否存在"编号更高的下一个配置"，有就把它执行完。
+          新控制器可能重复发送 Freeze/Install/Delete，靠 <code>Num</code> 栅栏让 shardgrp 忽略重复。</p></div></div></div>
+      <div class="acc-item"><button class="acc-head">5C · 并发的配置变更<span class="arw">›</span></button>
+        <div class="acc-body"><div class="acc-body-inner"><p>当多个控制器并发运行时（旧的可能还活着），要保证<b>只有一个</b>能提交下一个配置。
+          由于 shardgrp 的 RPC 已被 Num 栅栏保护，剩下的挑战就是"配置写入的原子性"——用 kvsrv 的版本号 + 版本化 Put，
+          让只有一个控制器写入成功，其他的直接返回。另外要保证新控制器执行恢复时，旧控制器不会干扰它。</p></div></div></div>
+      <div class="acc-item"><button class="acc-head">5D · 自由扩展<span class="arw">›</span></button>
+        <div class="acc-body"><div class="acc-body-inner"><p>开放题。可选方向：把控制器改用 kvraft（而非 kvsrv）存储配置；给 kvsrv 增加 Range 操作（用 B 树等支持范围查询的结构）；
+          给 kvraft 加"领导者租约"以支持不经过日志的快速读；给 kvraft 或 shardkv 增加<b>事务</b>（后者需要两阶段提交 + 两阶段锁）。
+          需要自己写测试并提交 <code>extension.md</code>。</p></div></div></div>
+    </div>
+
+    <div class="h-label k-deep"><span class="dot"></span>新手提示</div>
+    <ul>
+      <li>Part A 可以用迟交额度，但 <b>Parts B–D 不能用</b>，注意时间安排。</li>
+      <li>Lab 5 必须与 Lab 4 使用<b>同一个</b> rsm 和 Raft 实现。</li>
+      <li>提交前务必重跑 <code>make raft1</code>、<code>make kvraft1</code>、<code>make shardkv</code>，确认前面的改动没有破坏旧测试。</li>
+    </ul>
+
+    <!-- 调试 -->
+    <section id="debug" style="margin-top:56px">
+      <h2>调试与心态：Lab 真正的难点</h2>
+      <p>课程自己的警告是"调试这些 Lab 可能非常耗时"。难的不是算法本身，而是<b>并发 bug 的定位</b>。下面是一些被反复验证有效的做法。</p>
+      <div class="grid grid-2">
+        <div class="card"><h3>🧪 永远开 -race</h3><p style="margin-top:6px">评分时不带，但你自己必须带。<code>go test -race</code> 能抓到"结果正确但存在竞态"的代码，这类 bug 会在压力测试下随机爆发。</p></div>
+        <div class="card"><h3>🔁 重复跑测试</h3><p style="margin-top:6px">并发 bug 是概率性的。Lab 3 说明明确建议"提交前多跑几遍测试"。跑 10 遍通过才算真的通过。</p></div>
+        <div class="card"><h3>📝 打日志，但要有策略</h3><p style="margin-top:6px">用 <code>log.Printf</code> 输出关键事件（任期变化、日志追加、状态切换）。Lab 3 说明建议打印 <code>Start</code> 和 <code>AppendEntries</code> 处理，能画出完整时间线。</p></div>
+        <div class="card"><h3>🧹 先写干净再写快</h3><p style="margin-top:6px">Lab 3 说明原话："为了后续 Lab，请把代码写（或重写）得干净清晰。"结构混乱的 Raft 在 Lab 4/5 会让你付出十倍代价。</p></div>
+        <div class="card"><h3>⏱️ 警惕"太慢"</h3><p style="margin-top:6px">如果测试超时，多半是循环空转、RPC 太频繁、或日志回退太慢。用 <code>time</code> 命令查看实际耗时。</p></div>
+        <div class="card"><h3>🧭 卡住就回论文</h3><p style="margin-top:6px">Lab 文档简略的地方，论文里往往有完整逻辑。Raft 的 Figure 2 值得反复读——"完整逻辑分散在图的好几个部分"。</p></div>
+      </div>
+      <div class="note-box nb-key" style="margin-top:24px">
+        <span class="nb-ic">🎯</span>
+        <div><p><strong>最后一句：</strong>如果某个 Lab 让你痛苦，那说明你正在学到真东西。这些 Lab 之所以被全世界采用，正是因为它们逼你真的理解"分布式"三个字。</p></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="about"><h4>MIT 6.824 学习指南</h4><p>面向零基础初学者的分布式系统可视化学习站点，基于 MIT 6.824 / 6.5840 公开课程资料重新整理。</p></div>
+    <div><h4>本站导航</h4><ul><li><a href="index.html">首页</a></li><li><a href="papers.html">论文精讲</a></li><li><a href="notes.html">可视化笔记</a></li></ul></div>
+    <div><h4>官方资料</h4><ul>
+      <li><a href="https://pdos.csail.mit.edu/6.824/labs/" target="_blank" rel="noopener">Lab 说明</a></li>
+      <li><a href="https://pdos.csail.mit.edu/6.824/labs/guidance.html" target="_blank" rel="noopener">调试指南</a></li>
+    </ul></div>
+  </div>
+  <div class="footer-bottom"><span>本页为学习整理，版权归原始作者与 MIT PDOS 所有。</span><span>Lab 通关手册</span></div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
