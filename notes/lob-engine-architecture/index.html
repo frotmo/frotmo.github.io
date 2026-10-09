@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>lob-engine 架构解析 · 高性能 Tick 级限价订单簿重建引擎</title>
+<meta name="description" content="C++ 高性能限价订单簿重建引擎的完整架构解读：四层架构、10 个源模块的职责与依赖、三条数据通路、8 项关键设计决策及其取舍、性能与消融实验，以及按优先级与学习路径组织的 36 条知识清单。">
+<style>
+:root{
+  --bg:#f5f6f9; --panel:#ffffff; --panel-2:#fafbfd;
+  --ink:#1c2230; --ink-2:#4a5468; --ink-3:#7b869c;
+  --line:#e3e7ef; --line-2:#eef1f7;
+  --accent:#4f46e5; --accent-2:#6366f1; --accent-soft:#eef0ff;
+  --bid:#dc2626; --ask:#16a34a;
+  --p0:#dc2626; --p0-bg:#fef2f2;
+  --p1:#d97706; --p1-bg:#fffbeb;
+  --p2:#64748b; --p2-bg:#f1f5f9;
+  --exe:#0ea5e9; --infra:#8b5cf6; --core:#f59e0b; --model:#10b981;
+  --radius:14px; --radius-sm:9px;
+  --shadow:0 1px 2px rgba(20,28,45,.05), 0 8px 24px -12px rgba(20,28,45,.14);
+  --shadow-lg:0 24px 60px -20px rgba(20,28,45,.28);
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Cascadia Code","Courier New",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+body{
+  font-family:var(--sans); background:var(--bg); color:var(--ink);
+  line-height:1.68; -webkit-font-smoothing:antialiased;
+  font-size:15px;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+
+/* ---------- nav ---------- */
+header{
+  position:sticky; top:0; z-index:50;
+  background:rgba(255,255,255,.86); backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.nav{display:flex;align-items:center;gap:6px;height:56px;overflow-x:auto;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.brand{
+  font-weight:700;font-size:15px;letter-spacing:-.2px;white-space:nowrap;
+  margin-right:10px;display:flex;align-items:center;gap:8px;flex:none;
+}
+.brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.nav a{
+  color:var(--ink-2);text-decoration:none;font-size:13.5px;font-weight:500;
+  padding:6px 11px;border-radius:8px;white-space:nowrap;transition:.16s;flex:none;
+}
+.nav a:hover{background:var(--accent-soft);color:var(--accent)}
+.nav a.on{background:var(--accent);color:#fff}
+/* 返回笔记首页（本站子页约定） */
+.home-link{
+  display:inline-flex;align-items:center;gap:5px;flex:none;
+  font-size:12.5px;font-weight:600;color:var(--ink-2);text-decoration:none;
+  padding:5px 11px;border-radius:8px;border:1px solid var(--line);
+  background:var(--panel);margin-right:6px;transition:.16s;white-space:nowrap;
+}
+.home-link:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+
+/* ---------- hero ---------- */
+.hero{padding:52px 0 34px}
+.hero h1{font-size:clamp(25px,4.4vw,40px);line-height:1.24;letter-spacing:-.7px;font-weight:760}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero p.lead{margin-top:14px;font-size:clamp(14px,1.7vw,16.5px);color:var(--ink-2);max-width:760px}
+.tagrow{display:flex;flex-wrap:wrap;gap:7px;margin-top:20px}
+.tag{
+  font-size:12px;font-weight:600;padding:4px 11px;border-radius:20px;
+  background:#fff;border:1px solid var(--line);color:var(--ink-2);
+}
+.tag.k{background:var(--accent-soft);border-color:#dcdcfb;color:var(--accent)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:28px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
+.stat b{display:block;font-size:24px;font-weight:740;letter-spacing:-.6px;line-height:1.2}
+.stat span{font-size:12.5px;color:var(--ink-3);font-weight:500}
+.stat.hi b{color:var(--accent)}
+
+/* ---------- section ---------- */
+section{padding:40px 0;border-top:1px solid var(--line)}
+.sec-head{margin-bottom:22px}
+.sec-kicker{font-size:12px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);margin-bottom:7px}
+.sec-head h2{font-size:clamp(20px,2.9vw,27px);letter-spacing:-.5px;font-weight:730}
+.sec-head p{margin-top:8px;color:var(--ink-2);max-width:820px;font-size:14.5px}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+
+/* ---------- diagram ---------- */
+.diagram{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px;box-shadow:var(--shadow);overflow:hidden}
+.diagram svg{display:block;width:100%;height:auto}
+.hint{font-size:12.5px;color:var(--ink-3);margin-top:10px;text-align:center}
+.hint b{color:var(--accent);font-weight:600}
+.m-hint{display:none;font-size:12.5px;color:var(--accent);font-weight:600;margin-top:10px;text-align:center}
+
+/* svg interactive */
+.node{cursor:pointer;transition:.15s}
+.node:hover .nbg{filter:brightness(.965)}
+.node.sel .nbg{stroke-width:2.4}
+.legend{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:14px;font-size:12.5px;color:var(--ink-2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+/* ---------- module grid ---------- */
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px}
+.mcard{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:16px 17px;cursor:pointer;transition:.18s;box-shadow:var(--shadow);position:relative;overflow:hidden;
+}
+.mcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c,var(--accent))}
+.mcard:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg);border-color:#d8dcea}
+.mcard .mname{font-family:var(--mono);font-size:13.5px;font-weight:650;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mcard .mtype{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--c,var(--accent));color:#fff;letter-spacing:.3px}
+.mcard .mrole{font-size:13px;color:var(--ink-2);margin-top:9px;line-height:1.55}
+.mcard .mmeta{font-size:11.5px;color:var(--ink-3);margin-top:11px;font-family:var(--mono);display:flex;justify-content:space-between;gap:8px}
+.mcard .more{font-size:11.5px;color:var(--accent);font-weight:600;margin-top:9px}
+
+/* ---------- flow ---------- */
+.flowbox{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px 18px;box-shadow:var(--shadow)}
+.flowbox h3{font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:9px}
+.flowbox h3 .badge{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:5px;background:var(--accent-soft);color:var(--accent)}
+.flowbox>p{font-size:13px;color:var(--ink-3);margin-bottom:16px}
+.flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+.fstep{
+  flex:1 1 118px;min-width:112px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:var(--radius-sm);padding:11px 12px;cursor:pointer;transition:.16s;position:relative;
+}
+.fstep:hover{border-color:var(--accent);background:var(--accent-soft)}
+.fstep.on{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 2px rgba(79,70,229,.12)}
+.fstep .fi{font-family:var(--mono);font-size:11.5px;font-weight:650;color:var(--ink)}
+.fstep .fd{font-size:11.5px;color:var(--ink-3);margin-top:4px;line-height:1.5}
+.farrow{flex:0 0 26px;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:14px;font-weight:700}
+.flow-note{margin-top:14px;font-size:12.5px;color:var(--ink-2);background:var(--panel-2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 13px;line-height:1.6}
+
+/* ---------- decisions ---------- */
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.dcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:17px 18px;box-shadow:var(--shadow);transition:.18s}
+.dcard:hover{box-shadow:var(--shadow-lg)}
+.dcard h4{font-size:14.5px;display:flex;align-items:center;gap:9px;line-height:1.4}
+.dcard h4 .num{
+  flex:none;width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;
+  font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:var(--mono);
+}
+.dcard .dec{font-size:13px;color:var(--ink-2);margin-top:11px;line-height:1.62}
+.dcard .dec b{color:var(--ink);font-weight:640}
+.tradeoff{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+.to{border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.55}
+.to.gain{background:#f0fdf4;border:1px solid #d3f0dd}
+.to.cost{background:#fff7ed;border:1px solid #fbe4c8}
+.to b{display:block;font-size:11px;font-weight:700;letter-spacing:.5px;margin-bottom:4px}
+.to.gain b{color:#15803d}
+.to.cost b{color:#b45309}
+.dcard .gainline{margin-top:11px;font-size:12px;font-family:var(--mono);color:var(--accent);font-weight:600}
+
+/* ---------- perf ---------- */
+.ptable{width:100%;border-collapse:collapse;font-size:13.5px}
+.ptable th,.ptable td{padding:11px 13px;text-align:left;border-bottom:1px solid var(--line-2)}
+.ptable th{font-size:12px;color:var(--ink-3);font-weight:650;text-transform:uppercase;letter-spacing:.5px}
+.ptable td.num,.ptable th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.ptable tr:last-child td{border-bottom:none}
+.ptable .win{color:var(--bid);font-weight:700}
+.ptable .base{color:var(--ink-2)}
+.bar{height:7px;border-radius:4px;background:var(--accent);display:inline-block;vertical-align:middle}
+.bar.b{background:#cbd2e0}
+.perf-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:14px}
+.callout{background:linear-gradient(135deg,#eef0ff,#f7f5ff);border:1px solid #e0e0fb;border-radius:var(--radius);padding:18px}
+.callout h4{font-size:14px;margin-bottom:9px}
+.callout .big{font-size:30px;font-weight:760;letter-spacing:-1px;color:var(--accent);line-height:1.1}
+.callout p{font-size:12.5px;color:var(--ink-2);margin-top:9px;line-height:1.6}
+
+/* ---------- knowledge ---------- */
+.kbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:18px}
+.chip{
+  font-size:12.5px;font-weight:600;padding:5px 13px;border-radius:20px;border:1px solid var(--line);
+  background:#fff;color:var(--ink-2);cursor:pointer;transition:.16s;user-select:none;
+}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip.p0.on{background:var(--p0);border-color:var(--p0)}
+.chip.p1.on{background:var(--p1);border-color:var(--p1)}
+.chip.p2.on{background:var(--p2);border-color:var(--p2)}
+.progwrap{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink-2);font-weight:600}
+.progtrack{width:130px;height:7px;background:var(--line);border-radius:4px;overflow:hidden}
+.progfill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0;transition:width .3s;border-radius:4px}
+
+.kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.ktheme{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.ktheme>.kt-head{padding:13px 16px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:10px;background:var(--panel-2)}
+.kt-head .kt-icon{width:26px;height:26px;border-radius:8px;background:var(--tc,var(--accent));display:flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+.kt-head h4{font-size:13.5px;font-weight:680}
+.kt-head .kt-n{margin-left:auto;font-size:11px;color:var(--ink-3);font-family:var(--mono)}
+.kitem{padding:11px 16px;border-bottom:1px solid var(--line-2);display:flex;gap:10px;cursor:pointer;transition:.14s}
+.kitem:last-child{border-bottom:none}
+.kitem:hover{background:var(--panel-2)}
+.kitem.done{opacity:.5}
+.kitem.done .kt-t{text-decoration:line-through;text-decoration-color:var(--ink-3)}
+.kbox{
+  flex:none;width:17px;height:17px;border:1.6px solid var(--line);border-radius:5px;margin-top:2px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;transition:.16s;background:#fff;
+}
+.kitem.done .kbox{background:var(--accent);border-color:var(--accent)}
+.kbox::after{content:"";width:8px;height:5px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translate(1px,-1px);opacity:0}
+.kitem.done .kbox::after{opacity:1}
+.kt-body{flex:1;min-width:0}
+.kt-t{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.kp{font-size:10px;font-weight:700;padding:1.5px 6px;border-radius:4px;font-family:var(--mono);flex:none}
+.kp.p0{background:var(--p0-bg);color:var(--p0)}
+.kp.p1{background:var(--p1-bg);color:var(--p1)}
+.kp.p2{background:var(--p2-bg);color:var(--p2)}
+.kt-d{font-size:12.5px;color:var(--ink-3);margin-top:4px;line-height:1.58;display:none}
+.kitem.open .kt-d{display:block}
+
+/* ---------- path ---------- */
+.path{margin-top:22px;position:relative;padding-left:8px}
+.pstage{position:relative;padding:0 0 20px 30px;border-left:2px solid var(--line)}
+.pstage:last-child{border-left-color:transparent;padding-bottom:0}
+.pstage::before{
+  content:"";position:absolute;left:-8px;top:3px;width:14px;height:14px;border-radius:50%;
+  background:#fff;border:2.5px solid var(--accent);
+}
+.pstage h4{font-size:14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.pstage h4 .st{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:5px;background:var(--accent-soft);color:var(--accent)}
+.pstage p{font-size:12.8px;color:var(--ink-2);margin-top:5px;line-height:1.62}
+.pstage .stags{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.pstage .stags span{font-size:11px;padding:3px 9px;border-radius:6px;background:var(--panel);border:1px solid var(--line);color:var(--ink-2);font-family:var(--mono)}
+
+/* ---------- drawer ---------- */
+.scrim{position:fixed;inset:0;background:rgba(20,28,45,.42);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:.25s;z-index:90}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;top:0;right:0;height:100%;width:min(460px,92vw);background:var(--panel);
+  box-shadow:var(--shadow-lg);z-index:100;transform:translateX(102%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+  display:flex;flex-direction:column;
+}
+.drawer.on{transform:translateX(0)}
+.dh{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:12px}
+.dh .dt{flex:1;min-width:0}
+.dh .dt .dk{font-size:11px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--accent)}
+.dh .dt h3{font-family:var(--mono);font-size:17px;margin-top:4px;letter-spacing:-.3px;word-break:break-word}
+.dh .dt .df{font-size:12px;color:var(--ink-3);font-family:var(--mono);margin-top:5px;word-break:break-all}
+.dclose{
+  flex:none;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;
+  cursor:pointer;font-size:16px;color:var(--ink-2);line-height:1;transition:.16s;
+}
+.dclose:hover{background:var(--panel-2);color:var(--ink)}
+.db{padding:18px 20px;overflow-y:auto;flex:1}
+.db h5{font-size:11.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--ink-3);margin:18px 0 9px}
+.db h5:first-child{margin-top:0}
+.db p{font-size:13.5px;color:var(--ink-2);line-height:1.68}
+.db ul{list-style:none;display:flex;flex-direction:column;gap:7px}
+.db li{font-size:13px;color:var(--ink-2);padding-left:17px;position:relative;line-height:1.6}
+.db li::before{content:"";position:absolute;left:4px;top:8px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.db code{font-family:var(--mono);font-size:12px;background:var(--accent-soft);color:var(--accent);padding:1.5px 6px;border-radius:5px}
+.db pre{
+  font-family:var(--mono);font-size:11.5px;line-height:1.62;background:#1c2230;color:#dbe2f0;
+  padding:13px 15px;border-radius:10px;overflow-x:auto;margin-top:4px;
+}
+.db pre .c{color:#7f8ba6}
+.db pre .k{color:#c4b5fd}
+.db pre .s{color:#86efac}
+.db .pills{display:flex;flex-wrap:wrap;gap:6px}
+.db .pills span{font-family:var(--mono);font-size:11.5px;padding:4px 10px;border-radius:7px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink-2)}
+.db .kv{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:8px 0;border-bottom:1px solid var(--line-2)}
+.db .kv:last-child{border-bottom:none}
+.db .kv b{font-family:var(--mono);font-weight:600;color:var(--ink)}
+
+/* ---------- footer ---------- */
+footer{padding:34px 0 50px;border-top:1px solid var(--line);color:var(--ink-3);font-size:12.5px;text-align:center}
+footer code{font-family:var(--mono);background:var(--panel);border:1px solid var(--line);padding:2px 7px;border-radius:6px}
+
+/* ---------- responsive ---------- */
+@media(max-width:900px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .perf-grid{grid-template-columns:1fr}
+  .tradeoff{grid-template-columns:1fr}
+}
+@media(max-width:640px){
+  body{font-size:14.5px}
+  .hero{padding:34px 0 24px}
+  section{padding:30px 0}
+  .wrap{padding:0 15px}
+  .mgrid,.kgrid,.dgrid{grid-template-columns:1fr}
+  .farrow{flex:0 0 100%;height:20px;transform:rotate(90deg)}
+  .flow{flex-direction:column}
+  .fstep{flex:1 1 auto;width:100%}
+  .progwrap{margin-left:0;width:100%;justify-content:flex-start}
+  .drawer{width:100%;height:88%;top:auto;bottom:0;border-radius:18px 18px 0 0;transform:translateY(102%)}
+  .drawer.on{transform:translateY(0)}
+  .stat b{font-size:21px}
+  /* 架构图窄屏下改为可横向滑动，保证文字可读 */
+  .diagram{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+  .diagram svg{min-width:680px}
+  .m-hint{display:block}
+  /* 表格压缩内边距，避免窄屏溢出 */
+  .ptable th,.ptable td{padding:9px 8px;font-size:12.5px}
+  .ptable td.num,.ptable th.num{font-size:12.5px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav" id="nav">
+    <span class="brand"><span class="dot"></span>lob-engine</span>
+    <a class="home-link" href="../../" title="返回笔记首页">← 首页</a>
+    <a href="#overview">概览</a>
+    <a href="#architecture">架构</a>
+    <a href="#modules">模块</a>
+    <a href="#dataflow">数据流</a>
+    <a href="#decisions">设计决策</a>
+    <a href="#performance">性能</a>
+    <a href="#knowledge">知识地图</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ HERO ============ -->
+  <div class="hero" id="overview">
+    <h1>高性能 Tick 级<br><em>限价订单簿重建引擎</em></h1>
+    <p class="lead">
+      从 A 股 Level-2「逐笔委托 + 逐笔成交 + 撤单」数据流重建限价订单簿，
+      输出盘口与微结构指标，并附带可复现的性能基准。
+      代码量仅 <b>1031 行 C++</b>，却覆盖了低延迟量化系统里最核心的几个工程手法。
+    </p>
+    <div class="tagrow">
+      <span class="tag k">C++20</span>
+      <span class="tag k">CMake + Ninja</span>
+      <span class="tag k">MSVC / GCC 双兼容</span>
+      <span class="tag">零第三方依赖</span>
+      <span class="tag">合成数据自洽</span>
+      <span class="tag">语义等价校验</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>1031</b><span>行 C++（11 个源文件）</span></div>
+      <div class="stat"><b>3 + 1</b><span>可执行文件 + 1 静态库</span></div>
+      <div class="stat hi"><b>15.7×</b><span>相对 std::map 基线加速</span></div>
+      <div class="stat hi"><b>98.8</b><span>M msg/s 单线程吞吐</span></div>
+    </div>
+  </div>
+
+  <!-- ============ ARCHITECTURE ============ -->
+  <section id="architecture">
+    <div class="sec-head">
+      <div class="sec-kicker">System Architecture</div>
+      <h2>四层架构总览</h2>
+      <p>依赖方向自上而下、单向收敛：应用层调用基础设施与核心层，全部最终落到数据模型层。
+        <b>点击任意模块</b>可查看它的职责、依赖与关键代码。</p>
+    </div>
+
+    <div class="diagram">
+      <svg viewBox="0 0 920 600" role="img" aria-label="四层架构图">
+        <!-- L1 -->
+        <rect x="30" y="16" width="860" height="112" rx="14" fill="#f0f9ff" stroke="#bae6fd" stroke-dasharray="5 4"/>
+        <text x="48" y="40" font-size="11.5" font-weight="700" fill="#0284c7" letter-spacing="1">应用层 · EXECUTABLES</text>
+        <g class="node" data-mod="bench">
+          <rect class="nbg" x="52" y="54" width="256" height="58" rx="10" fill="#fff" stroke="#0ea5e9" stroke-width="1.4"/>
+          <text x="68" y="78" font-size="14" font-weight="700" fill="#0c4a6e" font-family="monospace">lob_bench</text>
+          <text x="68" y="97" font-size="11.5" fill="#64748b">基准测试 + 正确性校验</text>
+        </g>
+        <g class="node" data-mod="gen">
+          <rect class="nbg" x="332" y="54" width="256" height="58" rx="10" fill="#fff" stroke="#0ea5e9" stroke-width="1.4"/>
+          <text x="348" y="78" font-size="14" font-weight="700" fill="#0c4a6e" font-family="monospace">lob_gen</text>
+          <text x="348" y="97" font-size="11.5" fill="#64748b">生成逐笔二进制文件</text>
+        </g>
+        <g class="node" data-mod="replay">
+          <rect class="nbg" x="612" y="54" width="256" height="58" rx="10" fill="#fff" stroke="#0ea5e9" stroke-width="1.4"/>
+          <text x="628" y="78" font-size="14" font-weight="700" fill="#0c4a6e" font-family="monospace">lob_replay</text>
+          <text x="628" y="97" font-size="11.5" fill="#64748b">mmap 回放 + 指标导出</text>
+        </g>
+        <!-- arrows -->
+        <path d="M460 128 L460 156" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar)"/>
+        <!-- L2 -->
+        <rect x="30" y="158" width="860" height="112" rx="14" fill="#f5f3ff" stroke="#ddd6fe" stroke-dasharray="5 4"/>
+        <text x="48" y="182" font-size="11.5" font-weight="700" fill="#7c3aed" letter-spacing="1">基础设施层 · HEADER-ONLY</text>
+        <g class="node" data-mod="replayh">
+          <rect class="nbg" x="52" y="196" width="256" height="58" rx="10" fill="#fff" stroke="#8b5cf6" stroke-width="1.4"/>
+          <text x="68" y="220" font-size="13.5" font-weight="700" fill="#4c1d95" font-family="monospace">replay.h</text>
+          <text x="68" y="239" font-size="11.5" fill="#64748b">回放驱动 · 模板 + 软件预取</text>
+        </g>
+        <g class="node" data-mod="ioh">
+          <rect class="nbg" x="332" y="196" width="256" height="58" rx="10" fill="#fff" stroke="#8b5cf6" stroke-width="1.4"/>
+          <text x="348" y="220" font-size="13.5" font-weight="700" fill="#4c1d95" font-family="monospace">io.h</text>
+          <text x="348" y="239" font-size="11.5" fill="#64748b">MappedFile · mmap 零拷贝</text>
+        </g>
+        <g class="node" data-mod="commonh">
+          <rect class="nbg" x="612" y="196" width="256" height="58" rx="10" fill="#fff" stroke="#8b5cf6" stroke-width="1.4"/>
+          <text x="628" y="220" font-size="13.5" font-weight="700" fill="#4c1d95" font-family="monospace">common.h</text>
+          <text x="628" y="239" font-size="11.5" fill="#64748b">BBO / Timer / 价格常量</text>
+        </g>
+        <path d="M460 270 L460 298" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar)"/>
+        <!-- L3 -->
+        <rect x="30" y="300" width="860" height="112" rx="14" fill="#fffbeb" stroke="#fde68a" stroke-dasharray="5 4"/>
+        <text x="48" y="324" font-size="11.5" font-weight="700" fill="#d97706" letter-spacing="1">核心层 · CORE</text>
+        <g class="node" data-mod="array">
+          <rect class="nbg" x="52" y="338" width="256" height="58" rx="10" fill="#fff" stroke="#f59e0b" stroke-width="2"/>
+          <text x="68" y="362" font-size="13.5" font-weight="700" fill="#78350f" font-family="monospace">array_book.h ★</text>
+          <text x="68" y="381" font-size="11.5" fill="#64748b">ArrayOrderBook 优化实现</text>
+        </g>
+        <g class="node" data-mod="naive">
+          <rect class="nbg" x="332" y="338" width="256" height="58" rx="10" fill="#fff" stroke="#f59e0b" stroke-width="1.4"/>
+          <text x="348" y="362" font-size="13.5" font-weight="700" fill="#78350f" font-family="monospace">naive_book.h</text>
+          <text x="348" y="381" font-size="11.5" fill="#64748b">NaiveOrderBook 基线对照</text>
+        </g>
+        <g class="node" data-mod="gencpp">
+          <rect class="nbg" x="612" y="338" width="256" height="58" rx="10" fill="#fff" stroke="#f59e0b" stroke-width="1.4"/>
+          <text x="628" y="362" font-size="13.5" font-weight="700" fill="#78350f" font-family="monospace">generator.cpp</text>
+          <text x="628" y="381" font-size="11.5" fill="#64748b">迷你撮合引擎（编入 lob_core）</text>
+        </g>
+        <path d="M460 412 L460 440" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar)"/>
+        <!-- L4 -->
+        <rect x="30" y="442" width="860" height="112" rx="14" fill="#ecfdf5" stroke="#a7f3d0" stroke-dasharray="5 4"/>
+        <text x="48" y="466" font-size="11.5" font-weight="700" fill="#059669" letter-spacing="1">数据模型层 · MODEL</text>
+        <g class="node" data-mod="msgh">
+          <rect class="nbg" x="52" y="480" width="816" height="58" rx="10" fill="#fff" stroke="#10b981" stroke-width="1.4"/>
+          <text x="68" y="504" font-size="13.5" font-weight="700" fill="#065f46" font-family="monospace">message.h</text>
+          <text x="68" y="523" font-size="11.5" fill="#64748b">FeedMsg（40 字节）— 逐笔委托 / 成交 / 撤单，全项目共享的唯一数据结构</text>
+        </g>
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="#94a3b8"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+    <p class="hint">点击模块查看细节 · 依赖方向自上而下单向收敛，<b>无循环依赖</b></p>
+    <p class="m-hint">← 左右滑动查看完整架构图 →</p>
+  </section>
+
+  <!-- ============ MODULES ============ -->
+  <section id="modules">
+    <div class="sec-head">
+      <div class="sec-kicker">Modules</div>
+      <h2>模块职责一览</h2>
+      <p>11 个源文件各司其职。点击卡片展开完整的职责清单、依赖关系与关键代码片段。</p>
+    </div>
+    <div class="mgrid" id="mgrid"></div>
+  </section>
+
+  <!-- ============ DATAFLOW ============ -->
+  <section id="dataflow">
+    <div class="sec-head">
+      <div class="sec-kicker">Data Flow</div>
+      <h2>两条数据通路</h2>
+      <p>项目有两条独立的数据流：一条服务于<b>性能验证</b>，一条服务于<b>指标产出</b>。
+        点击流程中的任意环节查看该步骤的输入、输出与实现细节。</p>
+    </div>
+
+    <div class="flowbox" style="margin-bottom:16px">
+      <h3>通路 A · 基准测试 <span class="badge">lob_bench</span></h3>
+      <p>目标：证明「优化实现」与「基线实现」语义等价，并量化性能差距。</p>
+      <div class="flow" data-flow="A">
+        <div class="fstep" data-step="a1"><div class="fi">GenConfig</div><div class="fd">配置消息数 / 种子 / 报价模型参数</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="a2"><div class="fi">generate_feed()</div><div class="fd">内置撮合引擎产出自洽逐笔序列</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="a3"><div class="fi">vector&lt;FeedMsg&gt;</div><div class="fd">内存中的逐笔消息数组</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="a4"><div class="fi">verify&lt;Book&gt;()</div><div class="fd">两版各回放一遍，每 1024 条对 BBO 做 FNV 哈希</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="a5"><div class="fi">MATCH / MISMATCH</div><div class="fd">哈希一致 ⇒ 语义等价</div></div>
+      </div>
+      <div class="flow-note">
+        <b>关键：</b>正确性校验与计时<b>分离</b>。校验走完整回放并采样 BBO；计时则把 Book 的构造、订单池预分配都放在计时区间之外，
+        只测量「回放循环」本身——否则会把内存分配开销算进去，得到虚高的 ns/msg。
+      </div>
+    </div>
+
+    <div class="flowbox" style="margin-bottom:16px">
+      <h3>通路 A′ · 计时对比 <span class="badge">lob_bench</span></h3>
+      <p>目标：在正确性确认后，测量两套实现的吞吐并计算加速比。</p>
+      <div class="flow" data-flow="A2">
+        <div class="fstep" data-step="b1"><div class="fi">预热 1 轮</div><div class="fd">让 CPU 升频、cache 进入稳定态</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="b2"><div class="fi">time_replay&lt;Array&gt;</div><div class="fd">PF=8 预取，重复 5 次取中位数</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="b3"><div class="fi">time_replay&lt;Naive&gt;</div><div class="fd">PF=0，基线无法预取</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="b4"><div class="fi">g_sink</div><div class="fd">volatile 汇总，防止优化器消除循环</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="b5"><div class="fi">ns/msg · 加速比</div><div class="fd">10.13 vs 159.33 → 15.7×</div></div>
+      </div>
+      <div class="flow-note">
+        <b>为什么取中位数？</b> 笔记本 CPU 有频率波动与后台干扰，均值会被离群值污染。5 次排序后取中间值最稳健。
+        <b>为什么用 volatile sink？</b> 否则编译器发现结果没人用，会把整个回放循环优化掉——这是基准测试最经典的陷阱。
+      </div>
+    </div>
+
+    <div class="flowbox">
+      <h3>通路 B · 回放与指标产出 <span class="badge">lob_gen → lob_replay → plot.py</span></h3>
+      <p>目标：把逐笔流重建为订单簿，导出微结构指标并可视化。</p>
+      <div class="flow" data-flow="B">
+        <div class="fstep" data-step="c1"><div class="fi">feed.bin</div><div class="fd">40B/条 的二进制逐笔文件（190MB / 500万条）</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="c2"><div class="fi">MappedFile</div><div class="fd">mmap 映射为 FeedMsg 数组，零拷贝</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="c3"><div class="fi">replay_range&lt;Array&gt;</div><div class="fd">顺序读消息 + 预取 i+16 的订单池</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="c4"><div class="fi">ArrayOrderBook</div><div class="fd">on_order / on_trade / on_cancel 更新档位</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="c5"><div class="fi">BBO · depth()</div><div class="fd">每 snap 条采样盘口与五档深度</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="c6"><div class="fi">metrics.csv</div><div class="fd">价差 / 中间价 / 微价 / OFI / 深度</div></div>
+        <div class="farrow">›</div>
+        <div class="fstep" data-step="c7"><div class="fi">plot.py → PNG</div><div class="fd">四联图：价格 / 价差 / 微价偏离 / 深度</div></div>
+      </div>
+      <div class="flow-note">
+        <b>零拷贝的意义：</b>逐笔文件动辄数百 MB。传统「read 到缓冲区」需要额外一次完整内存拷贝；
+        <code>mmap</code> 把文件直接映射进虚拟地址空间，内核按需分页，回放时像访问普通数组一样顺序扫描。
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DECISIONS ============ -->
+  <section id="decisions">
+    <div class="sec-head">
+      <div class="sec-kicker">Design Decisions</div>
+      <h2>关键设计决策与取舍</h2>
+      <p>每一个性能数字背后都是一次明确的工程取舍。下面 8 个决策，按「收益 ←→ 代价」成对列出。</p>
+    </div>
+    <div class="dgrid" id="dgrid"></div>
+  </section>
+
+  <!-- ============ PERFORMANCE ============ -->
+  <section id="performance">
+    <div class="sec-head">
+      <div class="sec-kicker">Performance</div>
+      <h2>性能结果与消融实验</h2>
+      <p>测试环境：Intel Core i5-13500HX · Windows · MSVC 19.44 · <code style="font-family:var(--mono);font-size:12.5px">/O2 /GL /arch:AVX2</code>（LTO）。
+        数据：1000 万条合成逐笔消息，取 5 次中位数（含预热）。</p>
+    </div>
+
+    <div class="perf-grid" style="margin-bottom:16px">
+      <div class="card" style="padding:6px 4px">
+        <table class="ptable">
+          <thead><tr><th>实现</th><th class="num">ns/msg</th><th class="num">M msg/s</th><th style="width:110px">相对</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>ArrayOrderBook</b> <span style="color:var(--ink-3);font-size:12px">优化</span></td>
+              <td class="num win">10.13</td><td class="num win">98.76</td>
+              <td><span class="bar" style="width:100%"></span></td>
+            </tr>
+            <tr>
+              <td><b>NaiveOrderBook</b> <span style="color:var(--ink-3);font-size:12px">std::map 基线</span></td>
+              <td class="num base">159.33</td><td class="num base">6.28</td>
+              <td><span class="bar b" style="width:6.4%"></span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <h4>加速比</h4>
+        <div class="big">15.73×</div>
+        <p>正确性：两版逐条回放同一数据，每 1024 条对 BBO 做 FNV 滚动哈希，<b>完全一致</b>——所有优化都是语义等价的，不是靠「少算」换来的性能。</p>
+      </div>
+    </div>
+
+    <div class="perf-grid">
+      <div class="card" style="padding:6px 4px">
+        <table class="ptable">
+          <thead><tr><th>消融：软件预取</th><th class="num">ns/msg</th><th class="num">M msg/s</th></tr></thead>
+          <tbody>
+            <tr><td>关闭 <code style="font-family:var(--mono);font-size:12px">--pf 0</code></td><td class="num">12.74</td><td class="num">78.50</td></tr>
+            <tr><td>开启 <code style="font-family:var(--mono);font-size:12px">--pf 8</code></td><td class="num win">10.00</td><td class="num win">99.99</td></tr>
+            <tr><td><b>提升</b></td><td class="num win" colspan="2">+21%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="padding:6px 4px">
+        <table class="ptable">
+          <thead><tr><th>优化迭代</th><th class="num">ns/msg</th><th class="num">加速比</th></tr></thead>
+          <tbody>
+            <tr><td>v1 扁平数组订单簿</td><td class="num">21.06</td><td class="num">7.55×</td></tr>
+            <tr><td>v2 紧凑订单池 12B→8B</td><td class="num">19.54</td><td class="num">7.87×</td></tr>
+            <tr><td>v3 分支消除</td><td class="num">18.51</td><td class="num">8.43×</td></tr>
+            <tr><td>v4 软件预取</td><td class="num">~17.9</td><td class="num">—</td></tr>
+            <tr><td><b>v5 最终</b></td><td class="num win">10.13</td><td class="num win">15.73×</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="flow-note" style="margin-top:16px">
+      <b>读法提示：</b>v1–v4 使用早期版本的合成数据（成交占比偏低、热路径更轻），与 v5 的绝对 ns/msg 不完全可比；
+      此处列出是为了体现「测量 → 定位瓶颈 → 改造」的优化思路递进。消融实验（预取开/关）在同一份数据上对比，结论最干净。
+    </div>
+  </section>
+
+  <!-- ============ KNOWLEDGE ============ -->
+  <section id="knowledge">
+    <div class="sec-head">
+      <div class="sec-kicker">Knowledge Map</div>
+      <h2>掌握本项目所需的知识清单</h2>
+      <p>按主题分为 7 类、共 36 个知识点，标注优先级（<b style="color:var(--p0)">P0 必须</b> /
+        <b style="color:var(--p1)">P1 重要</b> / <b style="color:var(--p2)">P2 加分</b>）。
+        点击条目展开说明，勾选可记录学习进度（保存在浏览器本地）。</p>
+    </div>
+
+    <div class="kbar">
+      <span class="chip on" data-f="all">全部</span>
+      <span class="chip p0" data-f="P0">P0 必须</span>
+      <span class="chip p1" data-f="P1">P1 重要</span>
+      <span class="chip p2" data-f="P2">P2 加分</span>
+      <div class="progwrap">
+        <span id="progtxt">0 / 0 已掌握</span>
+        <div class="progtrack"><div class="progfill" id="progfill"></div></div>
+      </div>
+    </div>
+
+    <div class="kgrid" id="kgrid"></div>
+
+    <div class="path" id="path"></div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    lob-engine · 高性能 Tick 级限价订单簿重建引擎 &nbsp;·&nbsp; 架构解析与知识地图<br>
+    <span style="display:inline-block;margin-top:8px">源码 <code>github.com/frotmo/quant-lob-engine</code></span>
+  </div>
+</footer>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true">
+  <div class="dh">
+    <div class="dt">
+      <div class="dk" id="dk"></div>
+      <h3 id="dtitle"></h3>
+      <div class="df" id="dfile"></div>
+    </div>
+    <button class="dclose" id="dclose" aria-label="关闭">✕</button>
+  </div>
+  <div class="db" id="dbody"></div>
+</aside>
+
+<script>
+"use strict";
+
+/* =========================================================
+   1. 模块数据
+   ========================================================= */
+const C = {exe:'#0ea5e9', infra:'#8b5cf6', core:'#f59e0b', model:'#10b981'};
+
+const MODULES = {
+  bench:{n:'lob_bench',t:'可执行文件',c:C.exe,f:'src/bench_main.cpp',l:'144 行',layer:'应用层',
+    role:'性能基准测试与正确性校验的入口程序。',
+    resp:['生成合成逐笔行情（GenConfig 可配消息数/种子）','用 ArrayOrderBook 与 NaiveOrderBook 各回放一遍同一份数据',
+          '每 1024 条对 BBO 做 FNV 滚动哈希，比对两版结果','多次回放取中位数计时，输出 ns/msg、M msg/s 与加速比',
+          '支持 --pf 参数扫描软件预取距离（0/4/8/16/32/64）'],
+    dep:['lob_core（静态库）','array_book.h','naive_book.h','generator.h','replay.h','common.h'],
+    key:'verify&lt;Book&gt;() 与 time_replay&lt;Book&gt;() 都是模板函数，同一个模板实例化出两套实现——这是「一次编写、双实现对照」的关键。',
+    code:'<span class="c">// 计时区间只包住回放循环，Book 构造放在外面</span>\nBook book;\nbook.reserve_orders(n_orders + 16);\nTimer tm; tm.start();\nreplay_range&lt;Book, 8&gt;(book, d, 0, n);\nconst double ns = tm.stop_ns();'},
+
+  gen:{n:'lob_gen',t:'可执行文件',c:C.exe,f:'src/gen_main.cpp',l:'44 行',layer:'应用层',
+    role:'把合成逐笔行情写出为二进制文件，供后续 mmap 回放使用。',
+    resp:['解析 --n / --seed / --out 参数','调用 generate_feed() 生成 std::vector&lt;FeedMsg&gt;','以 fwrite 一次性写盘（40B/条）'],
+    dep:['lob_core（静态库）','generator.h','common.h'],
+    key:'写盘格式就是 FeedMsg 的内存布局，没有任何序列化开销——因此可以直接 mmap 回来当数组用。',
+    code:'<span class="c">// 逐字节写出结构体内存布局，无需序列化</span>\nfwrite(feed.data(), sizeof(FeedMsg), feed.size(), f);\n<span class="c">// 190MB / 500万条</span>'},
+
+  replay:{n:'lob_replay',t:'可执行文件',c:C.exe,f:'src/replay_main.cpp',l:'149 行',layer:'应用层',
+    role:'mmap 零拷贝回放逐笔流，采样导出微结构指标 CSV。',
+    resp:['数据来源二选一：--in 文件（mmap）或 --gen N（内存生成）','用 ArrayOrderBook 回放，每 snap 条消息采样一次盘口',
+          '计算价差 / 中间价 / 微价 / OFI / 五档深度','统计盘口瞬时交叉占比（逐笔回放的固有现象）','输出摘要与 metrics.csv'],
+    dep:['lob_core','array_book.h','generator.h','replay.h','io.h','common.h'],
+    key:'微价（microprice）用对手方挂单量加权：买量越大，价格越可能上行，因此微价偏向卖价。这是短周期方向信号的常用构造。',
+    code:'<span class="c">// 微价：按对手方量加权</span>\nmicro = (bid_px * ask_qty + ask_px * bid_qty) / (bid_qty + ask_qty);\n<span class="c">// OFI：买卖挂单量变化之差</span>\nofi = (bid_qty - prev_bid_qty) - (ask_qty - prev_ask_qty);'},
+
+  replayh:{n:'replay.h',t:'头文件（模板）',c:C.infra,f:'include/lob/replay.h',l:'41 行',layer:'基础设施层',
+    role:'回放驱动：把「消息数组」喂给「订单簿」的通用循环，并内建软件预取。',
+    resp:['apply_msg()：按消息类型分发到 on_order / on_trade / on_cancel','replay_range&lt;Book,PF&gt;()：回放区间，提前 PF 条预取订单池',
+          '用 template + inline 实现，零虚函数开销'],
+    dep:['message.h'],
+    key:'模板参数 Book 采用「鸭子类型」——只要提供 on_order/on_trade/on_cancel/prefetch_order/reserve_orders 就能被回放，编译器在编译期完成绑定与内联。',
+    code:'template &lt;class Book, size_t PF = 16&gt;\ninline void replay_range(Book&amp; book, const FeedMsg* feed, size_t b, size_t e){\n  for (size_t i = b; i &lt; e; ++i){\n    if constexpr (PF &gt; 0){ <span class="c">/* 预取 i+PF */</span> }\n    apply_msg(book, feed[i]);\n  }\n}'},
+
+  ioh:{n:'io.h',t:'头文件',c:C.infra,f:'include/lob/io.h',l:'84 行',layer:'基础设施层',
+    role:'只读内存映射文件（zero-copy），把磁盘文件变成可直接访问的字节数组。',
+    resp:['MappedFile::open()：Windows 走 CreateFileMapping + MapViewOfFile，POSIX 走 mmap','析构自动 Unmap/Close，RAII 管理','禁用拷贝构造与赋值'],
+    dep:['（无项目内依赖）'],
+    key:'跨平台抽象集中在 #ifdef _WIN32 分支里，调用方完全无感——这是「把平台差异收敛到一处」的典型做法。',
+    code:'<span class="k">#ifdef</span> _WIN32\n  hMap_ = CreateFileMappingA(hFile_, nullptr, PAGE_READONLY, 0, 0, nullptr);\n  data_ = MapViewOfFile(hMap_, FILE_MAP_READ, 0, 0, 0);\n<span class="k">#else</span>\n  void* p = mmap(nullptr, size_, PROT_READ, MAP_PRIVATE, fd_, 0);\n<span class="k">#endif</span>'},
+
+  commonh:{n:'common.h',t:'头文件',c:C.infra,f:'include/lob/common.h',l:'40 行',layer:'基础设施层',
+    role:'全项目共享的公共类型与工具。',
+    resp:['PRICE_BASE / MAX_TICKS：价格带常量（5.00 元 ~ 86.92 元，共 8192 个 tick）','BBO 结构体：最优买卖价与对应挂单量',
+          'ticks_to_yuan()：tick 转元','Timer：基于 steady_clock 的单调高精度计时器'],
+    dep:['（无项目内依赖）'],
+    key:'用 steady_clock 而不是 system_clock——后者可能被系统时间调整影响（NTP 校时、时区变更），用于性能测量会得到负耗时或错误结论。',
+    code:'<span class="c">// 8192 个 tick，覆盖单只股票单日价格波动</span>\nstatic constexpr int32_t PRICE_BASE = 500;\nstatic constexpr int32_t MAX_TICKS  = 8192;'},
+
+  array:{n:'array_book.h',t:'头文件（核心）',c:C.core,f:'include/lob/array_book.h',l:'179 行',layer:'核心层',
+    role:'ArrayOrderBook —— 高性能订单簿实现，整个项目的性能核心。',
+    resp:['价格离散化：price - PRICE_BASE 直接作数组下标，档位读写 O(1)','8 字节紧凑订单池：order_id 稠密索引，热路径零 malloc',
+          '分支消除：lvl_qty_[2] 二维数组按 side 直接索引','最优价统一：买侧存下标、卖侧存负下标，共用一条无分支 max',
+          '冷热分离：档位清空重算最优价放进 [[unlikely]] 冷路径','prefetch_order()：软件预取订单池 cache line'],
+    dep:['common.h','message.h'],
+    key:'内存布局：档位数组 lvl_qty（2×8192×8B=128KB）+ lvl_cnt（2×8192×4B=64KB）≈192KB，可常驻 L2；订单池 8B × 委托数。',
+    code:'<span class="c">// 无分支最优价更新：卖侧用负下标，两侧统一取 max</span>\nconst int32_t cand = (s == 0) ? idx : -idx;\nint32_t&amp; b = best_[s];\nb = cand &gt; b ? cand : b;\n\n<span class="c">// 8 字节紧凑订单</span>\nstruct Order { int16_t price; uint8_t side, active; uint32_t qty; };'},
+
+  naive:{n:'naive_book.h',t:'头文件（基线）',c:C.core,f:'include/lob/naive_book.h',l:'91 行',layer:'核心层',
+    role:'NaiveOrderBook —— 「教科书写法」基线，功能完全等价，用于量化数据结构选型的差距。',
+    resp:['std::map 维护价格档（买盘 greater 排序、卖盘 less 排序）','std::unordered_map 维护订单表',
+          '每次操作 O(log n) + 指针追逐 + 节点分配','不实现软件预取（哈希桶无法按 id 定位 cache line）'],
+    dep:['common.h','message.h'],
+    key:'它的存在本身就是一种设计决策：性能优化必须有对照组。没有基线，「快」只是一个无法证伪的形容词。',
+    code:'using BidMap = std::map&lt;int32_t, Level, std::greater&lt;int32_t&gt;&gt;;\nusing AskMap = std::map&lt;int32_t, Level, std::less&lt;int32_t&gt;&gt;;\nstd::unordered_map&lt;uint64_t, Order&gt; orders_;'},
+
+  gencpp:{n:'generator.cpp',t:'源文件（静态库）',c:C.core,f:'src/generator.cpp',l:'195 行',layer:'核心层',
+    role:'合成逐笔行情生成器，内置 FIFO 迷你撮合引擎，产出「自洽」的委托/成交/撤单序列。',
+    resp:['订单表用 id 索引扁平数组 + active 标记，O(1) 定位、惰性删除','维护「活跃挂单池」，失效时 swap-remove O(1) 删除',
+          '自适应撤单：以盘口挂单量为反馈，把深度稳定在目标水平','订单流偏向（order flow bias）：制造价格趋势',
+          '不在事件中途截断，保证最后一条激进委托完整走完'],
+    dep:['generator.h','common.h'],
+    key:'这是全项目唯一的 .cpp，被编译进 lob_core 静态库。设计难点不在撮合本身，而在让生成的数据「统计上像真的」——深度收敛、有趋势、成交占比合理。',
+    code:'<span class="c">// swap-remove：O(1) 从活跃池删除</span>\nconst uint64_t last = active_pool.back();\nactive_pool[k] = last;\nlive[last].pool_idx = k;\nactive_pool.pop_back();'},
+
+  msgh:{n:'message.h',t:'头文件（模型）',c:C.model,f:'include/lob/message.h',l:'33 行',layer:'数据模型层',
+    role:'全项目共享的唯一数据结构：逐笔行情消息 FeedMsg。',
+    resp:['MsgType：Order / Trade / Cancel 三种消息类型','Side：Bid / Ask 买卖方向','FeedMsg：40 字节、8 字节对齐，static_assert 编译期锁定'],
+    dep:['（无项目内依赖）'],
+    key:'刻意设计为 40 字节：8(ts) + 8(id) + 8(id2) + 4(price) + 4(qty) + 1 + 1 + 2(pad)。既便于顺序读取，也保证数组内元素对齐。',
+    code:'struct FeedMsg {\n  uint64_t ts_ns, order_id, order_id2;\n  int32_t  price; uint32_t qty;\n  MsgType  type; Side side; uint16_t _pad;\n};\nstatic_assert(sizeof(FeedMsg) == 40, <span class="s">"must be 40 bytes"</span>);'}
+};
+
+/* =========================================================
+   2. 设计决策
+   ========================================================= */
+const DECISIONS = [
+  {t:'价格离散化 + 扁平数组', gain:'档位读写 O(1)；内存连续、硬件预取友好；档位数组常驻 L2',
+   cost:'要求价格落在有限区间（8192 tick）；极端行情可能越界，需保护分支',
+   dec:'A 股价格是 0.01 元的整数倍，于是把 <b>price 直接映射成数组下标</b>：idx = price - PRICE_BASE。用扁平数组替代 std::map。',
+   line:'→ 主要加速来源之一'},
+  {t:'8 字节紧凑订单池', gain:'工作集缩小 1/3；内存连续，可被软件预取命中',
+   cost:'要求 order_id 稠密连续；真实市场 id 稀疏，需换哈希表或环形缓冲',
+   dec:'order_id → Order 用<b>连续数组</b>存储（热路径零 malloc），并把 Order 压到 8 字节：int16 价格下标 + uint8 side/active + uint32 qty。',
+   line:'→ 为预取创造条件'},
+  {t:'分支消除', gain:'消除 50/50 随机分支，避免必然的分支预测失败',
+   cost:'代码可读性下降（负下标技巧不直观）',
+   dec:'买卖方向 side 在逐笔流里近似随机，分支预测器必然失效。把买卖档位数组放进 <b>lvl_qty_[2]</b> 直接用 side 当下标；最优价「买侧存下标、卖侧存负下标」，统一成一条无分支 max。',
+   line:'→ 约 +5%'},
+  {t:'冷热分离', gain:'主循环分支预测不被低频事件污染',
+   cost:'重算最优价最坏 O(MAX_TICKS) 线性扫描',
+   dec:'「某档被清空 → 重算最优价」是低频事件，放进 <b>[[unlikely]]</b> 冷路径。触发频率极低，线性扫描的代价可忽略。',
+   line:'→ 保护热路径'},
+  {t:'软件预取', gain:'用指令级并行掩盖内存延迟，约 +21%',
+   cost:'额外指令开销；要求「提前知道要访问哪个 id」',
+   dec:'逐笔回放是「顺序读消息 → 随机访问订单池」，后者是内存延迟瓶颈。处理第 i 条时<b>提前 PF 条</b>把订单池 cache line 拉进 L1（PF=8 最优）。',
+   line:'→ 12.74 → 10.00 ns/msg'},
+  {t:'模板替代虚函数', gain:'零虚函数开销、完全内联、编译期绑定',
+   cost:'无法运行时切换实现；模板实例化导致代码膨胀',
+   dec:'replay.h 用 <b>template&lt;class Book&gt;</b> + inline，而非「抽象基类 + 虚函数」。两套订单簿共享同一份回放代码，编译器分别特化。',
+   line:'→ 消除动态分派'},
+  {t:'mmap 零拷贝', gain:'避免数百 MB 的额外内存拷贝；内核按需分页',
+   cost:'需要平台分支代码；文件格式需与结构体内存布局一致',
+   dec:'逐笔文件动辄数百 MB。用 <b>mmap</b> 把文件直接映射进虚拟地址空间，回放时像访问普通数组一样顺序扫描。',
+   line:'→ 消除一次全量拷贝'},
+  {t:'合成数据 + 等价性校验', gain:'可分发、可复现；优化不是「少算」换性能',
+   cost:'不代表真实市场统计特性；哈希碰撞概率极低但非零',
+   dec:'真实 Level-2 数据分发受限，于是内置<b>迷你撮合引擎</b>生成自洽逐笔流。同时用 FNV 滚动哈希对两版实现做<b>语义等价性</b>校验。',
+   line:'→ 结论可证伪'}
+];
+
+/* =========================================================
+   3. 知识清单
+   ========================================================= */
+const KNOWLEDGE = [
+  {th:'C++ 语言与编译', icon:'⚙️', color:'#4f46e5', items:[
+    {p:'P0', t:'C++20 核心语法', d:'类与封装、模板、constexpr、static_assert、enum class。项目用 enum class 定义 MsgType/Side，用 static_assert 在编译期锁定 FeedMsg 为 40 字节、Order 为 8 字节。'},
+    {p:'P0', t:'模板与编译期多态', d:'replay.h 用 template&lt;class Book&gt; 让两套订单簿共享同一份回放代码。理解「鸭子类型」——只要接口对就能实例化，编译器在编译期完成绑定与内联，没有虚函数表开销。'},
+    {p:'P1', t:'RAII 与资源管理', d:'MappedFile 在析构函数里自动 Unmap/Close；拷贝构造与赋值被 delete。理解「资源获取即初始化」如何避免句柄泄漏。'},
+    {p:'P1', t:'内存布局与对齐', d:'为什么 FeedMsg 是 40 字节而不是 38？结构体成员顺序、padding、对齐规则直接决定数组访问效率。static_assert 是防止布局被无意改动的护栏。'},
+    {p:'P2', t:'编译期常量分发', d:'bench_main 用 switch(pf) 把运行时参数分发到 replay_range&lt;Book, 0|4|8|16|32|64&gt; 六个编译期实例——因为 PF 必须是编译期常量。'}
+  ]},
+  {th:'计算机体系结构', icon:'🧠', color:'#0ea5e9', items:[
+    {p:'P0', t:'Cache 层次与 cache line', d:'L1/L2/L3 的容量与延迟差异。cache line 通常 64 字节——这正是「8 字节订单」和「顺序访问」有价值的原因：一次加载能覆盖更多有效数据。'},
+    {p:'P0', t:'内存延迟 vs 带宽', d:'逐笔回放的瓶颈不是带宽而是延迟：一次 L3/内存访问约 40~200 周期，而计算只要几周期。诊断方法：看 ns/msg 是否随数据规模增长。'},
+    {p:'P0', t:'分支预测', d:'现代 CPU 流水线深达十几级，一次分支预测失败要清空流水线。买卖方向 50/50 随机 ⇒ 预测器必然失效 ⇒ 必须消除分支，而不是「优化分支」。'},
+    {p:'P1', t:'软件预取', d:'_mm_prefetch 提前把数据拉进 cache，用并行度掩盖延迟。关键是选对预取距离：太短来不及，太长会污染 cache。'},
+    {p:'P2', t:'SIMD / AVX2', d:'编译选项 -march=native / /arch:AVX2 让编译器使用向量指令。本项目未手写 SIMD，但深度聚合等操作是潜在受益点。'}
+  ]},
+  {th:'数据结构与算法', icon:'🧩', color:'#8b5cf6', items:[
+    {p:'P0', t:'复杂度与常数因子', d:'std::map 是 O(log n) 但常数因子大（指针追逐 + 缓存不友好）。工程中「O(1) 数组」常常完胜「O(log n) 树」，差距可达 10 倍以上。'},
+    {p:'P0', t:'扁平数组 + 下标映射', d:'把离散的价格值映射到连续数组下标。前提是值域有限——这是「领域知识换性能」的经典案例。'},
+    {p:'P0', t:'订单池设计', d:'order_id → Order 的映射：稠密时用数组，稀疏时用哈希表/环形缓冲。选型直接决定能否做软件预取。'},
+    {p:'P1', t:'FIFO 队列（撮合）', d:'价格优先、时间优先是撮合的基本规则。生成器用 std::deque 维护每个价位的先进先出队列。'},
+    {p:'P1', t:'O(1) 删除与惰性删除', d:'swap-remove：把待删元素与末尾交换再 pop_back，O(1) 完成。配合 active 标记做惰性删除，避免在队列中线性查找。'},
+    {p:'P2', t:'哈希表 / 环形缓冲', d:'真实市场 order_id 稀疏，需要开放寻址哈希表或环形缓冲。理解负载因子与探测策略对性能的影响。'}
+  ]},
+  {th:'量化业务 · 订单簿', icon:'📊', color:'#10b981', items:[
+    {p:'P0', t:'限价订单簿模型', d:'价格档（price level）、挂单量、订单数、最优买卖价（BBO）、各档深度。这是所有微观结构分析的底座。'},
+    {p:'P0', t:'A 股 Level-2 逐笔行情', d:'逐笔委托 / 逐笔成交 / 撤单三类消息的字段与语义。理解「委托先于成交推送」这一时序特性。'},
+    {p:'P0', t:'撮合规则', d:'价格优先、时间优先。激进单越过对手价即成交；被动单挂在队列里等待。这是生成器内置迷你撮合引擎的依据。'},
+    {p:'P1', t:'微结构指标', d:'价差 spread、中间价 mid、微价 microprice（按对手方量加权）、订单流不平衡 OFI、五档深度。它们是短周期方向信号的常用构造。'},
+    {p:'P1', t:'价格 tick 与离散化', d:'A 股最小变动单位 0.01 元。理解 tick 如何决定价格带宽度（8192 tick ≈ 81.92 元）与数组规模。'},
+    {p:'P2', t:'瞬时交叉与事件原子性', d:'逐笔回放中约 20% 采样点出现 bid ≥ ask，是「委托先于成交推送」的固有现象，不是 bug。生产系统把「委托 + 其触发的成交」当原子事件处理。'}
+  ]},
+  {th:'性能工程方法论', icon:'📏', color:'#f59e0b', items:[
+    {p:'P0', t:'测量优先', d:'先测量再优化。基准要预热（让 CPU 升频、cache 稳定）、多次取中位数（抵抗频率波动与后台干扰）。'},
+    {p:'P0', t:'消融实验', d:'把变量单独关掉再测，才能归因。例如预取 pf=0 vs pf=8，直接证明「+21% 来自预取」而非其他因素。'},
+    {p:'P0', t:'正确性等价验证', d:'优化必须语义等价。用 FNV 滚动哈希对两版实现的 BBO 逐段比对，是低成本、可自动化的等价性证明。'},
+    {p:'P1', t:'编译器优化选项', d:'/O2 /GL（LTO）/arch:AVX2 /fp:fast 的含义与风险。/fp:fast 放宽浮点语义换取速度，在金融计算中需谨慎评估。'},
+    {p:'P2', t:'Profiling 工具', d:'VTune / perf / perf stat 定位 cache miss 与分支失败。本项目靠「规模扫描 + 消融」定位瓶颈，Profiler 是更直接的补充。'}
+  ]},
+  {th:'系统与工程实践', icon:'🔧', color:'#ec4899', items:[
+    {p:'P0', t:'虚拟内存与 mmap', d:'把文件映射进虚拟地址空间，内核按需分页。理解零拷贝的本质是「省掉用户态缓冲区那一份拷贝」。'},
+    {p:'P1', t:'跨平台抽象', d:'#ifdef _WIN32 把平台差异收敛到 io.h 一处，调用方无感。这是可移植性与可读性的平衡点。'},
+    {p:'P1', t:'CMake 构建系统', d:'静态库（lob_core）+ 三个可执行文件的组织；target_link_libraries 传递依赖；编译选项按编译器分支。'},
+    {p:'P1', t:'静态库与头文件组织', d:'include/lob/ 放接口（header-only 的模板与基础设施），src/ 放实现。头文件仅 generator.cpp 需要编译。'},
+    {p:'P2', t:'数据格式与可视化', d:'二进制逐笔格式（内存布局即文件格式）、CSV 指标导出、matplotlib 四联图。理解「让结果可被看见」是工程闭环的一部分。'}
+  ]},
+  {th:'延伸方向', icon:'🚀', color:'#64748b', items:[
+    {p:'P2', t:'多标的并行', d:'按 symbol 分片，多线程/多进程并行回放。理解 false sharing 与 NUMA 对并行扩展性的影响。'},
+    {p:'P2', t:'真实交易所数据接入', d:'替换 generator，直接解析交易所原始逐笔二进制格式。需要处理字节序、变长字段、消息校验。'},
+    {p:'P2', t:'增量因子计算', d:'在回放中直接计算 OFI、队列不平衡、VPIN 等微结构因子，避免二次遍历。'},
+    {p:'P2', t:'稀疏 order_id 处理', d:'把稠密索引数组换成开放寻址哈希表或环形缓冲，以适配真实市场稀疏的单号分布。'}
+  ]}
+];
+
+const PATH = [
+  {s:'阶段 0', t:'打地基', d:'先建立「性能的物理直觉」——不理解 cache 与分支预测，后面所有优化都只是死记硬背。',
+   tags:['C++20 基础语法','模板与编译期多态','Cache 层次','分支预测','复杂度与常数因子']},
+  {s:'阶段 1', t:'读懂核心', d:'掌握订单簿业务模型与两套数据结构的对照，能说清「为什么数组能赢 map」。',
+   tags:['限价订单簿模型','逐笔行情语义','撮合规则','扁平数组 + 下标映射','订单池设计']},
+  {s:'阶段 2', t:'工程方法', d:'学会用测量驱动优化：基准、消融、等价性校验三件套，以及系统编程的基本功。',
+   tags:['测量优先','消融实验','正确性等价验证','mmap 零拷贝','CMake 构建']},
+  {s:'阶段 3', t:'进阶扩展', d:'向真实系统演进：SIMD、多线程分片、真实数据接入、增量因子计算。',
+   tags:['软件预取调优','SIMD / AVX2','多标的并行','真实数据格式','Profiling']}
+];
+
+/* =========================================================
+   4. 渲染
+   ========================================================= */
+const esc = s => String(s).replace(/&(?!amp;|lt;|gt;|#)/g,'&amp;');
+
+// --- 模块卡片 ---
+(function(){
+  const g = document.getElementById('mgrid');
+  g.innerHTML = Object.entries(MODULES).map(([k,m])=>`
+    <div class="mcard" style="--c:${m.c}" data-mod="${k}">
+      <div class="mname">${m.n}<span class="mtype" style="background:${m.c}">${m.t}</span></div>
+      <div class="mrole">${m.role}</div>
+      <div class="mmeta"><span>${m.f}</span><span>${m.l}</span></div>
+      <div class="more">查看细节 →</div>
+    </div>`).join('');
+})();
+
+// --- 决策卡片 ---
+(function(){
+  document.getElementById('dgrid').innerHTML = DECISIONS.map((d,i)=>`
+    <div class="dcard">
+      <h4><span class="num">${String(i+1).padStart(2,'0')}</span>${d.t}</h4>
+      <div class="dec">${d.dec}</div>
+      <div class="tradeoff">
+        <div class="to gain"><b>收益</b>${d.gain}</div>
+        <div class="to cost"><b>代价</b>${d.cost}</div>
+      </div>
+      <div class="gainline">${d.line}</div>
+    </div>`).join('');
+})();
+
+// --- 知识清单 ---
+const KSTATE = JSON.parse(localStorage.getItem('lob_know') || '{}');
+let KFILTER = 'all';
+function renderK(){
+  const g = document.getElementById('kgrid');
+  let total = 0, done = 0;
+  g.innerHTML = KNOWLEDGE.map(theme=>{
+    const items = theme.items.filter(it => KFILTER==='all' || it.p===KFILTER);
+    if(!items.length) return '';
+    return `<div class="ktheme" style="--tc:${theme.color}">
+      <div class="kt-head">
+        <div class="kt-icon">${theme.icon}</div>
+        <h4>${theme.th}</h4>
+        <span class="kt-n">${items.length}</span>
+      </div>
+      ${items.map(it=>{
+        const id = theme.th + '|' + it.t;
+        const on = !!KSTATE[id];
+        total++; if(on) done++;
+        return `<div class="kitem${on?' done':''}" data-k="${id}">
+          <div class="kbox"></div>
+          <div class="kt-body">
+            <div class="kt-t">${it.t}<span class="kp ${it.p.toLowerCase()}">${it.p}</span></div>
+            <div class="kt-d">${it.d}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+  // 进度按全部 36 项统计（不受筛选影响）
+  let allTotal=0, allDone=0;
+  KNOWLEDGE.forEach(t=>t.items.forEach(it=>{ allTotal++; if(KSTATE[t.th+'|'+it.t]) allDone++; }));
+  document.getElementById('progtxt').textContent = `${allDone} / ${allTotal} 已掌握`;
+  document.getElementById('progfill').style.width = (allTotal? (allDone/allTotal*100):0) + '%';
+}
+
+document.getElementById('kgrid').addEventListener('click', e=>{
+  const item = e.target.closest('.kitem');
+  if(!item) return;
+  // 点勾选框区域 → 切换完成；点正文 → 展开说明
+  const id = item.dataset.k;
+  if(e.target.closest('.kbox')){
+    KSTATE[id] = !KSTATE[id];
+    localStorage.setItem('lob_know', JSON.stringify(KSTATE));
+    item.classList.toggle('done', !!KSTATE[id]);
+    let allTotal=0, allDone=0;
+    KNOWLEDGE.forEach(t=>t.items.forEach(it=>{ allTotal++; if(KSTATE[t.th+'|'+it.t]) allDone++; }));
+    document.getElementById('progtxt').textContent = `${allDone} / ${allTotal} 已掌握`;
+    document.getElementById('progfill').style.width = (allTotal? (allDone/allTotal*100):0) + '%';
+  } else {
+    item.classList.toggle('open');
+  }
+});
+
+document.querySelectorAll('.chip[data-f]').forEach(c=>{
+  c.addEventListener('click', ()=>{
+    document.querySelectorAll('.chip[data-f]').forEach(x=>x.classList.remove('on'));
+    c.classList.add('on');
+    KFILTER = c.dataset.f;
+    renderK();
+  });
+});
+
+// --- 学习路径 ---
+(function(){
+  document.getElementById('path').innerHTML = `
+    <div class="sec-head" style="margin-top:34px">
+      <div class="sec-kicker">Learning Path</div>
+      <h2 style="font-size:19px">四阶段学习路径</h2>
+    </div>` + PATH.map(p=>`
+    <div class="pstage">
+      <h4><span class="st">${p.s}</span>${p.t}</h4>
+      <p>${p.d}</p>
+      <div class="stags">${p.tags.map(t=>`<span>${t}</span>`).join('')}</div>
+    </div>`).join('');
+})();
+
+/* =========================================================
+   5. 详情抽屉
+   ========================================================= */
+const drawer = document.getElementById('drawer');
+const scrim  = document.getElementById('scrim');
+function openDrawer(){ drawer.classList.add('on'); scrim.classList.add('on'); }
+function closeDrawer(){ drawer.classList.remove('on'); scrim.classList.remove('on'); }
+document.getElementById('dclose').addEventListener('click', closeDrawer);
+scrim.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeDrawer(); });
+
+function showModule(k){
+  const m = MODULES[k]; if(!m) return;
+  document.getElementById('dk').textContent = m.layer + ' · ' + m.t;
+  document.getElementById('dtitle').textContent = m.n;
+  document.getElementById('dfile').textContent = m.f + ' · ' + m.l;
+  document.getElementById('dbody').innerHTML = `
+    <h5>职责</h5><p>${m.role}</p>
+    <h5>主要工作</h5><ul>${m.resp.map(r=>`<li>${r}</li>`).join('')}</ul>
+    <h5>依赖</h5><div class="pills">${m.dep.map(d=>`<span>${d}</span>`).join('')}</div>
+    <h5>关键点</h5><p>${m.key}</p>
+    <h5>代码片段</h5><pre>${m.code}</pre>`;
+  openDrawer();
+}
+
+/* =========================================================
+   6. 数据流细节
+   ========================================================= */
+const STEPS = {
+  a1:{k:'输入 · 配置',t:'GenConfig',d:'定义目标消息数、随机种子、初始中间价、单笔最大数量、被动挂单深度、激进单占比、撤单概率基数、目标挂单数。',
+      i:'命令行参数（--n / --seed）',o:'一个 GenConfig 结构体'},
+  a2:{k:'生成 · 撮合',t:'generate_feed()',d:'内置 FIFO 迷你撮合引擎：新委托先与对手盘撮合，剩余部分挂入队列。撤单从「活跃挂单池」抽样（命中率 100%），并用自适应概率把盘口深度稳定在目标水平。',
+      i:'GenConfig',o:'std::vector&lt;FeedMsg&gt;（自洽的 委托/成交/撤单 序列）'},
+  a3:{k:'内存 · 数组',t:'std::vector&lt;FeedMsg&gt;',d:'1000 万条 × 40 字节 ≈ 381.5 MB。整个序列一次性驻留内存，供两版实现反复回放。',
+      i:'generate_feed() 的返回值',o:'连续的 FeedMsg 数组，可直接 .data() 取裸指针'},
+  a4:{k:'校验 · 哈希',t:'verify&lt;Book&gt;()',d:'模板函数，分别用 ArrayOrderBook 与 NaiveOrderBook 回放同一份数据，每 1024 条对 BBO（买卖价 + 挂单量）做一次 FNV 滚动哈希。',
+      i:'FeedMsg 数组 + 订单数',o:'一个 64 位校验和'},
+  a5:{k:'结论 · 等价性',t:'MATCH / MISMATCH',d:'两版哈希一致即证明「优化是语义等价的」。若不一致，程序返回非零退出码，可直接接入 CI。',
+      i:'两版各自的校验和',o:'布尔结论 + 进程退出码'},
+
+  b1:{k:'准备 · 预热',t:'预热 1 轮',d:'先完整回放一遍（不计入结果），让 CPU 从节能频率升到睿频、cache 进入稳定状态。跳过预热会得到偏慢且波动大的数字。',
+      i:'FeedMsg 数组',o:'（丢弃结果）'},
+  b2:{k:'计时 · 优化版',t:'time_replay&lt;ArrayOrderBook&gt;',d:'构造 Book 与预分配订单池都放在计时区间之外，只测回放循环。开启 PF=8 软件预取，重复 5 次取中位数。',
+      i:'FeedMsg 数组 + 订单数',o:'中位耗时（纳秒）'},
+  b3:{k:'计时 · 基线',t:'time_replay&lt;NaiveOrderBook&gt;',d:'同一套模板，换成 std::map 实现。PF 传 0——哈希桶无法按 id 定位 cache line，预取对它没有意义。',
+      i:'FeedMsg 数组 + 订单数',o:'中位耗时（纳秒）'},
+  b4:{k:'防优化',t:'g_sink',d:'volatile 全局变量，把每轮回放的 BBO 结果累加进去。没有它，编译器会发现结果无人使用，直接把整个回放循环消除——基准测试最经典的陷阱。',
+      i:'每轮的 BBO 结果',o:'一个被强制求值的累加值'},
+  b5:{k:'输出',t:'ns/msg · 加速比',d:'总耗时除以消息条数得到 ns/msg，再换算 M msg/s。加速比 = 基线 ns/msg ÷ 优化 ns/msg = 15.73×。',
+      i:'两版中位耗时',o:'终端表格'},
+
+  c1:{k:'数据源',t:'feed.bin',d:'lob_gen 写出的二进制文件：500 万条 × 40 字节 ≈ 190 MB。文件内容就是 FeedMsg 的内存布局，没有任何序列化包装。',
+      i:'generate_feed() 的输出',o:'磁盘上的 190 MB 二进制文件'},
+  c2:{k:'零拷贝',t:'MappedFile',d:'用 mmap 把文件映射进虚拟地址空间，得到一个可直接当作 FeedMsg 数组访问的指针。没有「读文件到缓冲区」这一步，省掉一整次内存拷贝。',
+      i:'feed.bin 路径',o:'const FeedMsg* + 消息条数'},
+  c3:{k:'回放驱动',t:'replay_range&lt;ArrayOrderBook&gt;',d:'顺序遍历消息数组，每处理一条就提前把第 i+16 条要访问的订单拉进 cache。用指令级并行掩盖内存延迟。',
+      i:'FeedMsg 指针 + 区间',o:'更新完毕的订单簿'},
+  c4:{k:'重建',t:'ArrayOrderBook',d:'on_order 写入档位并更新最优价；on_trade 同时扣减买卖双方订单；on_cancel 扣减单侧。全部是 O(1) 的数组操作。',
+      i:'单条 FeedMsg',o:'更新后的档位数组与最优价'},
+  c5:{k:'采样',t:'BBO · depth()',d:'每 snap 条消息采样一次：取最优买卖价与挂单量，计算价差、中间价、微价、OFI，并累加五档深度。',
+      i:'当前订单簿状态',o:'一行指标数据'},
+  c6:{k:'导出',t:'metrics.csv',d:'12 列：seq, ts_ns, bid, ask, bid_qty, ask_qty, spread, mid, microprice, ofi, depth5_bid, depth5_ask。供研究或可视化直接使用。',
+      i:'采样行',o:'CSV 文件'},
+  c7:{k:'可视化',t:'plot.py → PNG',d:'matplotlib 四联图：盘口价格（含中间价）、价差、微价偏离、五档深度。同时打印统计摘要（价差均值、交叉占比、末态 BBO）。',
+      i:'metrics.csv',o:'lob_metrics.png'}
+};
+
+document.querySelectorAll('.fstep').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    const s = STEPS[el.dataset.step]; if(!s) return;
+    document.querySelectorAll('.fstep').forEach(x=>x.classList.remove('on'));
+    el.classList.add('on');
+    document.getElementById('dk').textContent = s.k;
+    document.getElementById('dtitle').textContent = s.t;
+    document.getElementById('dfile').textContent = '数据流通路中的一环';
+    document.getElementById('dbody').innerHTML = `
+      <h5>说明</h5><p>${s.d}</p>
+      <h5>输入</h5><p>${s.i}</p>
+      <h5>输出</h5><p>${s.o}</p>`;
+    openDrawer();
+  });
+});
+
+/* =========================================================
+   7. 架构图 / 模块卡 点击
+   ========================================================= */
+document.querySelectorAll('.node').forEach(n=>{
+  n.addEventListener('click', ()=>{
+    document.querySelectorAll('.node').forEach(x=>x.classList.remove('sel'));
+    n.classList.add('sel');
+    showModule(n.dataset.mod);
+  });
+});
+document.getElementById('mgrid').addEventListener('click', e=>{
+  const c = e.target.closest('.mcard'); if(c) showModule(c.dataset.mod);
+});
+
+/* =========================================================
+   8. 滚动高亮导航
+   ========================================================= */
+(function(){
+  /* 只取站内锚点链接：导航里还可能有「返回首页」这类外部/相对链接，
+     对它们做 querySelector 会抛 SyntaxError 并中断整段脚本。 */
+  const links = [...document.querySelectorAll('.nav a[href^="#"]')];
+  const secs  = links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  const io = new IntersectionObserver(es=>{
+    es.forEach(e=>{
+      if(e.isIntersecting){
+        links.forEach(l=>l.classList.toggle('on', l.getAttribute('href')==='#'+e.target.id));
+      }
+    });
+  }, {rootMargin:'-58px 0px -70% 0px'});
+  secs.forEach(s=>io.observe(s));
+})();
+
+/* 初始化 */
+renderK();
+</script>
+</body>
+</html>
