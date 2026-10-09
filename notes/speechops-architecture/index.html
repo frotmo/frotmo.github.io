@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>SpeechOps 架构解读 · 从能跑到能运营</title>
+<meta name="description" content="语音识别模型云服务化项目的架构解读：8 层分层架构、7 个代码模块的调用关系、11 条关键设计决策、完整数据流、实验结论与带优先级的知识清单。">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ══════════════════════ 顶部导航 ══════════════════════ -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark">S</span>
+      <span class="brand-text">SpeechOps<span class="brand-sub">架构解读</span></span>
+    </a>
+    <a class="home-link" href="../../" title="返回笔记首页">
+      <span class="home-arrow">←</span><span class="home-text">首页</span>
+    </a>
+    <nav class="nav" id="nav">
+      <a href="#problem">为什么难</a>
+      <a href="#architecture">分层架构</a>
+      <a href="#modules">模块调用</a>
+      <a href="#flow">数据流</a>
+      <a href="#decisions">设计决策</a>
+      <a href="#experiments">实验结论</a>
+      <a href="#knowledge">知识清单</a>
+    </nav>
+    <button class="nav-toggle" id="navToggle" aria-label="展开导航" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<!-- ══════════════════════ 首屏 ══════════════════════ -->
+<section class="hero" id="top">
+  <div class="hero-inner">
+    <p class="eyebrow">云计算 · 深度学习模型云服务化</p>
+    <h1>把模型从<span class="hl">能跑</span><br>推进到<span class="hl">能运营</span></h1>
+    <p class="lede">
+      工业界有一个普遍的落差：算法同学能训出指标达标的模型，
+      但把它变成稳定、可观测、可迭代的线上服务，往往是更难的那一半工作。
+      这个项目以<strong>中文语音识别</strong>为载体，把这一半补齐 ——
+      数据版本 → 训练 → 模型注册 → 容器化 → 编排部署 → 灰度发布 → 漂移监控 → 自动再训练。
+    </p>
+    <div class="metrics" id="heroMetrics"></div>
+    <p class="hero-hint">
+      下面每一块都可交互：<strong>点击</strong>展开细节，<strong>悬停</strong>高亮关联。
+      架构图点层看职责，模块图悬停看调用关系，数据流能逐步播放，知识清单可勾选并自动保存进度。
+    </p>
+  </div>
+</section>
+
+<main>
+
+<!-- ══════════════════════ 01 为什么难 ══════════════════════ -->
+<section class="sec" id="problem">
+  <div class="sec-head">
+    <span class="sec-num">01</span>
+    <h2>先说清楚：这件事难在哪</h2>
+    <p class="sec-desc">不是"模型训不出来"，而是训出来之后的事。下面每一条都是真实会发生的，点开看后果。</p>
+  </div>
+  <div class="pain-grid" id="painGrid"></div>
+</section>
+
+<!-- ══════════════════════ 02 分层架构 ══════════════════════ -->
+<section class="sec sec-alt" id="architecture">
+  <div class="sec-head">
+    <span class="sec-num">02</span>
+    <h2>八层架构，一次看清</h2>
+    <p class="sec-desc">
+      请求自上而下穿过八层。<strong>点击</strong>任意一层查看它解决什么问题、有哪些关键组件；<strong>悬停</strong>可快速预览。
+    </p>
+  </div>
+
+  <div class="arch-wrap">
+    <div class="arch-stack" id="archStack"></div>
+    <aside class="arch-detail" id="archDetail" aria-live="polite"></aside>
+  </div>
+
+  <div class="note">
+    <strong>四个约束决定了这套架构的形状：</strong>
+    音频推理是长耗时请求（同步 HTTP 承载不了）→ 异步队列；
+    模型加载要 60–180 秒（普通 Web 服务没这个问题）→ 三探针分离；
+    训练与推理环境容易不一致 → 收敛成单一推理实现；
+    上线后分布会漂移且劣化滞后 → 在线检测 + 自动再训练。
+  </div>
+</section>
+
+<!-- ══════════════════════ 03 模块划分与调用关系 ══════════════════════ -->
+<section class="sec" id="modules">
+  <div class="sec-head">
+    <span class="sec-num">03</span>
+    <h2>七个代码模块，怎么分工与协作</h2>
+    <p class="sec-desc">
+      上一个是概念上的分层，这里是<strong>真实代码结构</strong>。
+      依赖关系由源码里的 import 语句实际提取，不是示意图。
+      <strong>悬停</strong>模块卡或图上的节点，可高亮它的调用关系。
+    </p>
+  </div>
+
+  <div class="mod-wrap">
+    <div class="mod-graph-box">
+      <div class="mod-graph-head">
+        <span class="mod-graph-title">模块依赖图</span>
+        <span class="mod-graph-legend">
+          <span class="lg-item"><i class="lg-line"></i>调用方向</span>
+          <span class="lg-item"><i class="lg-cycle"></i>双向依赖</span>
+        </span>
+      </div>
+      <div class="mod-graph" id="depGraph"></div>
+      <p class="mod-graph-foot">
+        纵向为层级：越靠下越基础。<code>src/common</code> 被全部 6 个模块依赖，
+        是唯一的零业务逻辑地基。
+      </p>
+    </div>
+
+    <div class="mod-cards" id="moduleGrid"></div>
+  </div>
+
+  <div class="note note-warn">
+    <strong>一个刻意的"反向依赖"：<code>src.train</code> 与 <code>src.serving</code> 互相调用。</strong>
+    单向分层通常是好事，但这里的两条反向边都是有意为之 ——
+    <code>evaluate.py</code> 复用服务端的推理引擎（消除 training-serving skew），
+    <code>app.py</code> 复用数据模块的分层抽样与指标函数（保证对照同源）。
+    <strong>代价是打破了单向依赖；收益是消除了两处更危险的静默偏差。</strong>
+    这个取舍是有意识的，不是疏忽。
+  </div>
+</section>
+
+<!-- ══════════════════════ 04 数据流 ══════════════════════ -->
+<section class="sec sec-alt" id="flow">
+  <div class="sec-head">
+    <span class="sec-num">04</span>
+    <h2>一次推理请求的完整旅程</h2>
+    <p class="sec-desc">
+      从客户端上传音频到拿到文本，中间经过 14 个步骤。可以自动播放，也可以逐步点。
+    </p>
+  </div>
+
+  <div class="flow-controls">
+    <button class="btn btn-primary" id="flowPlay">▶ 自动播放</button>
+    <button class="btn" id="flowPrev">← 上一步</button>
+    <button class="btn" id="flowNext">下一步 →</button>
+    <span class="flow-counter" id="flowCounter">1 / 14</span>
+  </div>
+
+  <div class="flow-wrap">
+    <ol class="flow-steps" id="flowSteps"></ol>
+    <aside class="flow-detail" id="flowDetail" aria-live="polite"></aside>
+  </div>
+
+  <div class="note">
+    <strong>一个容易忽略的细节：</strong>
+    第 ⑨ 步「提取音频特征」刻意放在推理<strong>之前</strong>。
+    这样即使推理失败，输入分布的变化仍然被记录下来 ——
+    漂移检测不该因为模型报错而失明。
+  </div>
+</section>
+
+<!-- ══════════════════════ 05 设计决策 ══════════════════════ -->
+<section class="sec" id="decisions">
+  <div class="sec-head">
+    <span class="sec-num">05</span>
+    <h2>十一条核心设计决策</h2>
+    <p class="sec-desc">
+      设计文档的价值不在于说"我们用了什么"，而在于说清"为什么不用另一种"。
+      每条都标了<strong>决策</strong>、<strong>为什么</strong>和<strong>代价</strong>。
+    </p>
+  </div>
+
+  <div class="filter-bar" id="decisionFilter"></div>
+  <div class="dec-grid" id="decGrid"></div>
+</section>
+
+<!-- ══════════════════════ 06 实验结论 ══════════════════════ -->
+<section class="sec sec-alt" id="experiments">
+  <div class="sec-head">
+    <span class="sec-num">06</span>
+    <h2>四组实验，用数字说话</h2>
+    <p class="sec-desc">
+      E0 是前置条件，不做它后面三组的数字都不可信。每组都给出实际测量结果。
+    </p>
+  </div>
+
+  <div class="exp-grid" id="expGrid"></div>
+
+  <div class="note note-danger">
+    <strong>本轮最硬的结论：PSI 不能作为识别质量的代理指标。</strong>
+    在 12 个漂移场景上实测，<strong>PSI 与 CER 的 Spearman 秩相关 ρ = 0.028（p = 0.93）</strong> ——
+    统计上完全不相关。幅度扰动把 PSI 顶到饱和值 12.44 而 CER 只涨 2%；
+    语速扰动 PSI 仅 0.62 而 CER 涨 2.77 倍。
+    所以正确结构是：<strong>PSI 只触发评估，CER 门禁才决定是否重训/上线</strong>。
+  </div>
+</section>
+
+<!-- ══════════════════════ 07 知识清单 ══════════════════════ -->
+<section class="sec" id="knowledge">
+  <div class="sec-head">
+    <span class="sec-num">07</span>
+    <h2>所需知识清单</h2>
+    <p class="sec-desc">
+      按主题分类，每条标注<strong>优先级</strong>（核心 / 重要 / 进阶），
+      并按<strong>学习路径</strong>分为三个阶段。勾选后进度保存在本地浏览器。
+    </p>
+  </div>
+
+  <!-- 学习路径 -->
+  <div class="kn-path" id="knPath"></div>
+
+  <!-- 进度与筛选 -->
+  <div class="kn-progress-wrap">
+    <div class="kn-progress">
+      <div class="kn-progress-bar"><span id="knBar"></span></div>
+      <span class="kn-progress-text" id="knText">0 / 0</span>
+    </div>
+    <div class="kn-filter" id="knFilter"></div>
+    <div class="kn-actions">
+      <button class="btn btn-sm" id="knExpand">全部展开</button>
+      <button class="btn btn-sm" id="knCollapse">全部收起</button>
+      <button class="btn btn-sm btn-danger" id="knReset">清空勾选</button>
+    </div>
+  </div>
+
+  <div class="kn-groups" id="knGroups"></div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <p class="footer-title">SpeechOps</p>
+    <p class="footer-desc">语音识别模型的 MLOps 云服务化平台 · 架构解读站</p>
+    <p class="footer-meta">
+      零外部依赖（无 CDN、无构建步骤）· 可离线内网运行 · 适配桌面与移动端 ·
+      内容与 <code>docs/01-架构设计.md</code>、<code>docs/02-实验报告.md</code>、<code>src/</code> 实际代码保持一致
+    </p>
+    <p class="footer-meta" style="margin-top:8px">
+      <a href="../../">← 返回笔记首页</a>
+    </p>
+  </div>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>

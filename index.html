@@ -1,20 +1,178 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-    <meta charset='utf-8'>
-    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
-    <title>Page Title</title>
-    <meta name='viewport' content='width=device-width, initial-scale=1'>
-    <link rel='stylesheet' type='text/css' media='screen' href='main.css'>
-    <script src='main.js'></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>frotmo 的学习笔记 · 可视化学习文档</title>
+<meta name="description" content="frotmo 的可视化学习文档集合：把真实项目里的架构、取舍和踩过的坑讲清楚。目前收录 SpeechOps 语音识别模型的 MLOps 云服务化架构解读。">
+<link rel="stylesheet" href="assets/hub.css">
 </head>
 <body>
-    <code>
-        #include <bits/stdc++.h>
-        using namespace std;
-        signen main(){
-            return 0;
-        }
-    </code>
+
+<!-- ══════════════════════ 顶部导航 ══════════════════════ -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark">f</span>
+      <span class="brand-text" id="siteTitle">frotmo 的学习笔记</span>
+    </a>
+    <nav class="nav" id="nav">
+      <a href="#top">首页</a>
+      <a href="#featured">精选</a>
+      <a href="#all">全部笔记</a>
+      <a href="#guide">新增笔记</a>
+    </nav>
+    <a class="gh-link" id="ghLink" href="#" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+                 -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
+                 .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
+                 -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27
+                 .68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12
+                 .51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48
+                 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      GitHub
+    </a>
+    <button class="nav-toggle" id="navToggle" aria-label="展开导航" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<!-- ══════════════════════ 首屏 ══════════════════════ -->
+<section class="hero" id="top">
+  <div class="hero-inner">
+    <p class="eyebrow">可视化学习文档</p>
+    <h1 id="siteTagline">把做过的事讲清楚</h1>
+    <p class="lede" id="siteIntro"></p>
+    <div class="stats" id="stats"></div>
+  </div>
+</section>
+
+<main>
+
+<!-- ══════════════════════ 精选 ══════════════════════ -->
+<section class="sec" id="featured">
+  <div class="sec-head">
+    <h2>精选</h2>
+    <p class="sec-desc">内容最完整的一篇，从这里开始看最合适。</p>
+  </div>
+  <div id="featured"></div>
+</section>
+
+<!-- ══════════════════════ 全部笔记 ══════════════════════ -->
+<section class="sec sec-alt" id="all">
+  <div class="sec-head">
+    <h2>全部笔记</h2>
+    <p class="sec-desc">按方向筛选，或直接搜索标题、摘要与标签。</p>
+  </div>
+  <div class="filter-bar" id="filter"></div>
+  <div class="notes" id="notes"></div>
+</section>
+
+<!-- ══════════════════════ 规划中 ══════════════════════ -->
+<section class="sec" id="roadmap-sec">
+  <div class="sec-head">
+    <h2>接下来想写的</h2>
+    <p class="sec-desc">这些还没有内容，写完了会出现在上面的列表里。</p>
+  </div>
+  <div class="roadmap" id="roadmap"></div>
+</section>
+
+<!-- ══════════════════════ 扩展指南 ══════════════════════ -->
+<section class="sec sec-alt" id="guide">
+  <div class="sec-head">
+    <h2>怎么新增一篇笔记</h2>
+    <p class="sec-desc">
+      这个站是为「持续新增」设计的：每篇笔记是一个自包含的目录，
+      主页所有内容由一份清单驱动，加一篇笔记不需要动任何页面代码。
+    </p>
+  </div>
+
+  <div class="guide">
+    <div class="steps">
+      <div class="step">
+        <h3>建一个目录</h3>
+        <p>
+          在 <code>notes/</code> 下新建 <code>&lt;slug&gt;/</code>，
+          入口文件名必须是 <code>index.html</code>。
+          目录名用英文短横线风格，它会成为 URL 的一部分。
+        </p>
+      </div>
+      <div class="step">
+        <h3>写你的笔记</h3>
+        <p>
+          目录是自包含的 —— 自己的 CSS、JS、图片都放在里面，
+          用相对路径互相引用。这样每篇笔记互不干扰，
+          也不会因为改样式影响到别的笔记。
+        </p>
+      </div>
+      <div class="step">
+        <h3>在清单里加一条</h3>
+        <p>
+          打开 <code>assets/manifest.js</code>，往 <code>notes</code> 数组里加一个对象。
+          最少只要 <code>slug</code>、<code>title</code>、<code>category</code>、
+          <code>path</code> 四项，其余留空也不会报错。
+        </p>
+      </div>
+      <div class="step">
+        <h3>提交推送</h3>
+        <p>
+          GitHub Pages 会在 1 分钟内自动重新部署。
+          统计数字、筛选按钮、分类配色都会跟着清单自动更新。
+        </p>
+      </div>
+    </div>
+
+    <div>
+      <div class="tree"><span class="c"># 目录结构</span>
+frotmo.github.io/
+├── <span class="k">index.html</span>            <span class="c">← 主页（本页）</span>
+├── assets/
+│   ├── hub.css         <span class="c">主页样式</span>
+│   ├── hub.js          <span class="c">主页交互</span>
+│   └── <span class="k">manifest.js</span>       <span class="c">← 唯一要维护的文件</span>
+├── notes/
+│   ├── <span class="k">speechops-architecture/</span>
+│   │   ├── index.html
+│   │   ├── styles.css
+│   │   └── app.js
+│   └── <span class="c">&lt;你的下一篇&gt;/</span>
+│       └── index.html
+├── .nojekyll           <span class="c">关闭 Jekyll 处理</span>
+└── README.md
+</div>
+
+      <div class="note-tip">
+        <b>两个容易踩的坑：</b><br>
+        ① <code>path</code> 必须以 <code>/</code> 结尾，且<b>不要以 <code>/</code> 开头</b> ——
+        用相对路径才能保证以后换域名或加子路径都不用改代码。<br>
+        ② <code>slug</code> 必须与 <code>notes/</code> 下的目录名完全一致，否则链接会 404。
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <p class="footer-title" id="footerTitle">frotmo 的学习笔记</p>
+    <p class="footer-desc">
+      由 <span id="footerAuthor">frotmo</span> 维护 · 托管于 GitHub Pages
+    </p>
+    <p class="footer-meta">
+      零外部依赖（无 CDN、无构建步骤）· 可离线打开 ·
+      <a id="ghLinkFoot" href="#" target="_blank" rel="noopener">查看源码</a>
+      · © <span id="year"></span>
+    </p>
+  </div>
+</footer>
+
+<script src="assets/manifest.js"></script>
+<script src="assets/hub.js"></script>
 </body>
-</html>>
+</html>

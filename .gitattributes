@@ -1,0 +1,18 @@
+# 统一换行符为 LF。
+# 本项目是纯静态站点，部署到 GitHub Pages 后由 Linux 侧提供服务，
+# 仓库里存 LF 可以避免 Windows 检出时被转成 CRLF 产生噪声 diff。
+* text=auto eol=lf
+
+# 二进制文件不做换行转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+
+# 让 GitHub 的语言统计不要把笔记目录算成「文档」
+notes/** linguist-documentation
