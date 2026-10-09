@@ -1,0 +1,47 @@
+name: Deploy to GitHub Pages
+
+# 这个仓库是纯静态站点（无构建步骤），所以工作流只做三件事：
+# 把仓库原样打包 → 上传为 Pages 产物 → 部署。
+# 新增笔记不需要改这个文件。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 只给部署 Pages 所需的最小权限
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个部署；不取消进行中的那一个，
+# 避免连续推送时出现「部署到一半被打断」的中间态。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v5
+
+      - name: 打包站点
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # 站点就在仓库根目录，整包上传即可。
+          # 注意：Actions 方式的部署不会跑 Jekyll，
+          # 所以根目录的 .nojekyll 只是为了兼容「从分支部署」的旧方式。
+          path: '.'
+
+      - name: 部署
+        id: deploy
+        uses: actions/deploy-pages@v4
