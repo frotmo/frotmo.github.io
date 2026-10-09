@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="description" content="A 股量价因子体检框架的系统架构解读：五层单向依赖的分层设计、10 个代码模块的职责与调用关系、7 步数据流、8 条关键设计决策及其取舍，以及按优先级与学习路径组织的 33 条知识清单。">
+<title>factor_lab 架构解读 · 从因子计算到体检报告</title>
+<style>
+:root{
+  --bg:#F6F5F1; --panel:#FFFFFF; --panel2:#FBFAF7; --sunk:#F1EFE9;
+  --ink:#1F1F1C; --ink2:#57564F; --ink3:#8B8981;
+  --line:#E7E4DC; --line2:#F0EEE8;
+  --blue:#185FA5; --blue-l:#E7F0FA;
+  --amber:#BA7517; --amber-l:#FAEEDA;
+  --red:#A32D2D; --red-l:#FCEBEB;
+  --green:#3B6D11; --green-l:#EAF3DE;
+  --purple:#5B4B9E; --purple-l:#EFEBFA;
+  --teal:#0F6E6E; --teal-l:#E4F2F2;
+  --gray:#6B7280; --gray-l:#F1F0EC;
+  --r:14px; --r-s:9px;
+  --shadow:0 1px 2px rgba(31,31,28,.04), 0 8px 24px -12px rgba(31,31,28,.14);
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{margin:0; font-weight:650; letter-spacing:-.01em}
+p{margin:0}
+code,.mono{font-family:var(--mono); font-size:.86em}
+a{color:var(--blue); text-decoration:none}
+
+/* ---------- hero ---------- */
+.hero{
+  padding:34px 24px 28px; background:linear-gradient(180deg,#FFFFFF 0%,var(--bg) 100%);
+  border-bottom:1px solid var(--line);
+}
+.hero-in{max-width:1240px; margin:0 auto}
+.kicker{display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:600;
+  color:var(--blue); background:var(--blue-l); padding:4px 11px; border-radius:100px; letter-spacing:.02em}
+.kicker::before{content:""; width:6px; height:6px; border-radius:50%; background:var(--blue)}
+.hero h1{font-size:clamp(24px,4.2vw,36px); margin:14px 0 10px}
+.hero .sub{color:var(--ink2); max-width:74ch; font-size:15.5px}
+.chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:20px}
+.chip{font-size:12.5px; color:var(--ink2); background:var(--panel); border:1px solid var(--line);
+  border-radius:100px; padding:5px 12px}
+.chip b{color:var(--ink); font-weight:650}
+
+/* ---------- tabs ---------- */
+.tabs{position:sticky; top:0; z-index:40; background:rgba(246,245,241,.88);
+  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border-bottom:1px solid var(--line)}
+.tabs-in{max-width:1240px; margin:0 auto; padding:0 16px; display:flex; gap:2px; overflow-x:auto; scrollbar-width:none}
+.tabs-in::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto; border:0; background:none; font:inherit; font-size:13.5px; font-weight:600; color:var(--ink3);
+  padding:13px 14px; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap}
+.tab:hover{color:var(--ink2)}
+.tab.on{color:var(--blue); border-bottom-color:var(--blue)}
+
+/* ---------- layout ---------- */
+.layout{max-width:1240px; margin:0 auto; padding:26px 16px 80px; display:grid;
+  grid-template-columns:minmax(0,1fr) 384px; gap:24px; align-items:start}
+main{min-width:0; display:flex; flex-direction:column; gap:22px}
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow); overflow:hidden}
+.card-h{padding:18px 20px 0}
+.card-h h2{font-size:17px; display:flex; align-items:center; gap:10px}
+.num{display:inline-flex; align-items:center; justify-content:center; min-width:23px; height:23px; padding:0 6px;
+  font-size:12px; font-weight:700; color:var(--blue); background:var(--blue-l); border-radius:7px; font-family:var(--mono)}
+.card-sub{color:var(--ink3); font-size:13px; margin-top:6px; padding:0 20px}
+.card-b{padding:18px 20px 20px}
+
+/* ---------- 架构分层 ---------- */
+.layer{display:grid; grid-template-columns:96px minmax(0,1fr); gap:12px; align-items:stretch; margin-bottom:10px}
+.layer-tag{display:flex; flex-direction:column; justify-content:center; gap:3px; padding:10px 11px;
+  border-radius:var(--r-s); background:var(--sunk); border:1px solid var(--line)}
+.layer-tag b{font-size:12.5px; letter-spacing:.01em}
+.layer-tag span{font-size:10.5px; color:var(--ink3); font-family:var(--mono)}
+.layer-body{display:flex; flex-wrap:wrap; gap:8px; padding:10px; border-radius:var(--r-s);
+  background:var(--panel2); border:1px dashed var(--line)}
+.node{flex:1 1 150px; min-width:132px; text-align:left; cursor:pointer; font:inherit;
+  background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--gray);
+  border-radius:8px; padding:9px 11px; transition:.15s}
+.node:hover{border-color:var(--blue); border-left-color:var(--blue); background:var(--blue-l);
+  transform:translateY(-1px); box-shadow:var(--shadow)}
+.node.sel{border-color:var(--blue); border-left-color:var(--blue); background:var(--blue-l)}
+.node .nf{font-family:var(--mono); font-size:12.5px; font-weight:600; color:var(--ink); display:block}
+.node .nd{font-size:11.5px; color:var(--ink3); display:block; margin-top:2px}
+.arrowdown{text-align:center; color:var(--ink3); font-size:15px; line-height:1; margin:-4px 0 6px}
+.crosscut{margin-top:14px; padding:12px 14px; border-radius:var(--r-s); background:var(--gray-l);
+  border:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+.crosscut .lbl{font-size:12px; font-weight:700; color:var(--ink2); flex:0 0 auto}
+.crosscut .node{flex:0 1 auto; min-width:0}
+
+/* ---------- 依赖图 ---------- */
+.graphwrap{position:relative}
+svg.graph{display:block; width:100%; height:auto; touch-action:manipulation}
+.gnode rect{fill:var(--panel); stroke:var(--line); stroke-width:1.2; transition:.15s}
+.gnode text{font-size:12px; font-family:var(--mono); fill:var(--ink); pointer-events:none}
+.gnode text.sub{font-size:10px; fill:var(--ink3)}
+.gnode{cursor:pointer}
+.gnode:hover rect,.gnode.hl rect{fill:var(--blue-l); stroke:var(--blue)}
+.gnode.dim{opacity:.3}
+.gedge{stroke:#CFCBC0; stroke-width:1.3; fill:none; marker-end:url(#arw); transition:.15s}
+.gedge.hl{stroke:var(--blue); stroke-width:2}
+.gedge.dim{opacity:.12}
+.legend{display:flex; flex-wrap:wrap; gap:14px; margin-top:12px; font-size:12px; color:var(--ink3)}
+.legend i{display:inline-block; width:20px; height:0; border-top:1.5px solid #CFCBC0; vertical-align:middle; margin-right:5px}
+.legend i.dash{border-top-style:dashed}
+
+/* ---------- 数据流 ---------- */
+.flow{position:relative; padding-left:34px}
+.flow::before{content:""; position:absolute; left:12px; top:6px; bottom:6px; width:2px; background:var(--line)}
+.step{position:relative; margin-bottom:12px}
+.step::before{content:""; position:absolute; left:-28px; top:14px; width:11px; height:11px; border-radius:50%;
+  background:var(--panel); border:2.5px solid var(--line); transition:.15s}
+.step:hover::before,.step.sel::before{border-color:var(--blue); background:var(--blue)}
+.step-in{background:var(--panel2); border:1px solid var(--line); border-radius:var(--r-s); padding:11px 13px; cursor:pointer; transition:.15s}
+.step:hover .step-in,.step.sel .step-in{border-color:var(--blue); background:var(--blue-l)}
+.step-t{font-size:13.5px; font-weight:650; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.step-t .pill{font-size:10.5px; font-weight:700; color:var(--ink2); background:var(--sunk);
+  border-radius:5px; padding:2px 7px; font-family:var(--mono)}
+.step-d{font-size:12.5px; color:var(--ink2); margin-top:4px}
+.step-io{display:flex; gap:14px; flex-wrap:wrap; margin-top:7px; font-size:11.5px; color:var(--ink3)}
+.step-io b{color:var(--ink2); font-weight:600}
+.step-io .dt{font-family:var(--mono); background:var(--sunk); padding:1px 6px; border-radius:5px; color:var(--ink2)}
+
+/* ---------- 决策卡 ---------- */
+.dec{border:1px solid var(--line); border-radius:var(--r-s); padding:13px 15px; margin-bottom:10px;
+  background:var(--panel2); cursor:pointer; transition:.15s}
+.dec:hover,.dec.sel{border-color:var(--blue); background:var(--blue-l)}
+.dec-t{font-size:13.5px; font-weight:650; display:flex; gap:8px; align-items:flex-start}
+.dec-t .idx{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--blue);
+  background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:1px 6px; flex:0 0 auto; margin-top:1px}
+.dec-x{font-size:12.5px; color:var(--ink2); margin-top:6px}
+.badge{display:inline-block; font-size:10.5px; font-weight:700; border-radius:5px; padding:1.5px 7px; margin-right:6px}
+
+/* ---------- 知识清单 ---------- */
+.filters{display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-bottom:14px}
+.fbtn{border:1px solid var(--line); background:var(--panel); color:var(--ink2); font:inherit; font-size:12.5px;
+  font-weight:600; border-radius:100px; padding:5px 13px; cursor:pointer; transition:.15s}
+.fbtn:hover{border-color:var(--ink3)}
+.fbtn.on{background:var(--ink); border-color:var(--ink); color:#fff}
+.progress{margin-left:auto; font-size:12px; color:var(--ink3); font-family:var(--mono)}
+.pbar{height:5px; border-radius:3px; background:var(--sunk); overflow:hidden; margin:8px 0 16px}
+.pbar i{display:block; height:100%; background:linear-gradient(90deg,var(--blue),var(--teal)); transition:width .3s}
+.theme{margin-bottom:18px}
+.theme-h{display:flex; align-items:center; gap:9px; margin-bottom:9px}
+.theme-h h3{font-size:14px}
+.theme-h .tc{font-size:11px; color:var(--ink3); font-family:var(--mono); margin-left:auto}
+.dot{width:9px; height:9px; border-radius:3px; flex:0 0 auto}
+.kl{display:flex; flex-direction:column; gap:6px}
+.kitem{display:flex; gap:10px; align-items:flex-start; padding:9px 12px; border:1px solid var(--line);
+  border-radius:var(--r-s); background:var(--panel2); cursor:pointer; transition:.15s}
+.kitem:hover,.kitem.sel{border-color:var(--blue); background:var(--blue-l)}
+.kitem.done{opacity:.55}
+.kitem.done .kt{text-decoration:line-through}
+.ktick{flex:0 0 auto; width:17px; height:17px; border-radius:5px; border:1.5px solid var(--line);
+  background:var(--panel); display:grid; place-items:center; font-size:11px; color:transparent; margin-top:2px; transition:.15s}
+.ktick:hover{border-color:var(--green)}
+.kitem.done .ktick{background:var(--green); border-color:var(--green); color:#fff}
+.kbody{min-width:0; flex:1}
+.kt{font-size:13px; font-weight:600}
+.kw{font-size:11.5px; color:var(--ink3); margin-top:2px}
+.prio{flex:0 0 auto; font-size:10.5px; font-weight:700; border-radius:5px; padding:2px 7px; font-family:var(--mono); margin-top:1px}
+.p0{color:#fff; background:var(--red)}
+.p1{color:#fff; background:var(--amber)}
+.p2{color:#fff; background:var(--gray)}
+
+/* ---------- 学习路径 ---------- */
+.path{display:grid; gap:10px}
+.stage{display:grid; grid-template-columns:34px minmax(0,1fr); gap:12px; align-items:start}
+.stage-n{width:34px; height:34px; border-radius:10px; background:var(--blue-l); color:var(--blue);
+  display:grid; place-items:center; font-weight:700; font-family:var(--mono); font-size:13px; border:1px solid #D3E3F5}
+.stage-b{border:1px solid var(--line); border-radius:var(--r-s); padding:11px 13px; background:var(--panel2)}
+.stage-b h4{font-size:13.5px}
+.stage-b p{font-size:12.5px; color:var(--ink2); margin-top:4px}
+.tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:8px}
+.tags span{font-size:11px; font-family:var(--mono); background:var(--sunk); color:var(--ink2);
+  border-radius:5px; padding:2px 7px; border:1px solid var(--line)}
+
+/* ---------- 详情面板 ---------- */
+aside#detail{position:sticky; top:58px; align-self:start}
+.detail-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r);
+  box-shadow:var(--shadow); overflow:hidden; max-height:calc(100vh - 82px); display:flex; flex-direction:column}
+.detail-h{padding:15px 17px; border-bottom:1px solid var(--line); display:flex; align-items:flex-start; gap:10px; background:var(--panel2)}
+.detail-h .t{flex:1; min-width:0}
+.detail-h h3{font-size:14.5px; word-break:break-word}
+.detail-h .s{font-family:var(--mono); font-size:11.5px; color:var(--ink3); margin-top:3px; word-break:break-all}
+.detail-b{padding:16px 17px; overflow-y:auto; font-size:13px}
+.detail-b .empty{color:var(--ink3); text-align:center; padding:26px 8px; line-height:1.9}
+.detail-b .empty .big{font-size:26px; display:block; margin-bottom:8px; opacity:.5}
+.sec{margin-bottom:15px}
+.sec:last-child{margin-bottom:0}
+.sec-t{font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--ink3); margin-bottom:6px}
+.sec p{font-size:13px; color:var(--ink2)}
+.sec ul{margin:0; padding-left:17px; color:var(--ink2)}
+.sec li{margin-bottom:4px; font-size:12.5px}
+.kv{display:flex; gap:9px; font-size:12.5px; padding:4px 0; border-bottom:1px dashed var(--line2)}
+.kv:last-child{border-bottom:0}
+.kv b{flex:0 0 78px; color:var(--ink3); font-weight:600}
+.kv span{flex:1; min-width:0; word-break:break-word}
+.kv span code{background:var(--sunk); padding:1px 5px; border-radius:4px}
+.codeblk{font-family:var(--mono); font-size:11.5px; background:#2C2C2A; color:#E8E6E0;
+  border-radius:8px; padding:10px 12px; overflow-x:auto; white-space:pre; line-height:1.6}
+.plus li::marker{color:var(--green)} .minus li::marker{color:var(--red)}
+.closeb{display:none; border:1px solid var(--line); background:var(--panel); color:var(--ink2);
+  border-radius:8px; width:30px; height:30px; flex:0 0 auto; cursor:pointer; font-size:15px; line-height:1}
+.backdrop{display:none; position:fixed; inset:0; background:rgba(31,31,28,.34); z-index:45}
+.backdrop.on{display:block}
+
+footer{max-width:1240px; margin:0 auto; padding:0 16px 60px; color:var(--ink3); font-size:12.5px; text-align:center}
+
+@media (max-width:1024px){
+  .layout{grid-template-columns:1fr; padding-bottom:40px}
+  aside#detail{position:fixed; left:0; right:0; bottom:0; top:auto; z-index:50;
+    transform:translateY(102%); transition:transform .28s cubic-bezier(.32,.72,0,1); padding:0 8px}
+  aside#detail.open{transform:translateY(0)}
+  .detail-card{max-height:76vh; border-radius:16px 16px 0 0; border-bottom:0}
+  .closeb{display:block}
+  .hero{padding:32px 16px 24px}
+}
+@media (max-width:640px){
+  body{font-size:14.5px}
+  .layer{grid-template-columns:1fr; gap:6px}
+  .layer-tag{flex-direction:row; align-items:center; gap:8px; padding:7px 11px}
+  .node{flex:1 1 100%}
+  .card-b,.card-h,.card-sub{padding-left:14px; padding-right:14px}
+  .flow{padding-left:28px}
+  .step::before{left:-24px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------- topbar（本站子页约定：返回笔记首页） ---------- */
+.topbar{background:var(--panel); border-bottom:1px solid var(--line)}
+.topbar-in{max-width:1240px; margin:0 auto; padding:0 16px; height:54px;
+  display:flex; align-items:center; gap:12px}
+.brand{display:inline-flex; align-items:center; gap:9px; color:var(--ink);
+  font-weight:650; font-size:14px; text-decoration:none}
+.brand:hover{color:var(--blue)}
+.brand-mark{width:26px; height:26px; border-radius:8px; background:var(--blue); color:#fff;
+  display:grid; place-items:center; font-size:14px; font-weight:700; flex:0 0 auto}
+.home-link{margin-left:auto; display:inline-flex; align-items:center; gap:5px; flex:none;
+  font-size:12.5px; font-weight:600; color:var(--ink2); text-decoration:none;
+  padding:6px 12px; border-radius:8px; border:1px solid var(--line);
+  background:var(--panel2); transition:.16s; white-space:nowrap}
+.home-link:hover{border-color:var(--blue); color:var(--blue); background:var(--blue-l)}
+@media (max-width:640px){
+  .brand-text{display:none}
+  .topbar-in{height:50px}
+  .hero{padding-top:26px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="../../">
+      <span class="brand-mark">f</span>
+      <span class="brand-text">frotmo 的学习笔记</span>
+    </a>
+    <a class="home-link" href="../../">
+      <span aria-hidden="true">←</span> 返回笔记首页
+    </a>
+  </div>
+</header>
+
+
+<header class="hero">
+  <div class="hero-in">
+    <span class="kicker">系统架构 · 代码地图</span>
+    <h1>factor_lab —— A 股量价因子体检框架</h1>
+    <p class="sub">
+      一个"最简但贴近实战"的因子挖掘项目。下面把它的<strong>模块划分</strong>、<strong>调用关系</strong>、
+      <strong>数据流向</strong>与<strong>关键设计取舍</strong>摊开讲清楚，并附一份按优先级排序的知识清单。
+      所有内容都对照真实源码（9 个模块 + 1 个入口，共约 1,600 行 Python）整理，点击任意模块 / 步骤 / 知识点可看细节。
+    </p>
+    <div class="chips">
+      <span class="chip">代码量 <b>≈1,600 行</b> Python</span>
+      <span class="chip">模块 <b>10 个</b></span>
+      <span class="chip">因子 <b>14 个</b></span>
+      <span class="chip">流水线 <b>5 阶段</b></span>
+      <span class="chip">全量运行 <b>3–5 分钟</b></span>
+      <span class="chip">样本 <b>300 只 × 1304 天</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tabs-in" id="tabs"></div>
+</nav>
+
+<div class="layout">
+  <main id="main"></main>
+
+  <aside id="detail">
+    <div class="detail-card">
+      <div class="detail-h">
+        <div class="t">
+          <h3 id="d-title">点击左侧任意元素</h3>
+          <div class="s" id="d-sub">模块 · 数据流 · 决策 · 知识点</div>
+        </div>
+        <button class="closeb" id="d-close" aria-label="关闭">✕</button>
+      </div>
+      <div class="detail-b" id="d-body">
+        <div class="empty"><span class="big">◎</span>悬停可快速预览，点击查看完整说明。</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+<footer>基于 factor_lab 真实源码生成 · 架构说明与代码同步于 commit <span class="mono">d4a0215</span></footer>
+
+<script>
+/* ============================================================
+   数据层：把源码里的事实集中成结构化数据，供各视图渲染
+   ============================================================ */
+
+/* ---------- 分层架构 ---------- */
+var LAYERS = [
+  { key:'entry', name:'入口层', tech:'CLI', color:'var(--blue)', bg:'var(--blue-l)',
+    desc:'解析命令行参数，装配配置，驱动整条流水线',
+    nodes:['entry'] },
+  { key:'orch', name:'编排层', tech:'Orchestration', color:'var(--teal)', bg:'var(--teal-l)',
+    desc:'只负责"按顺序调用谁"，不含任何算法细节',
+    nodes:['pipe'] },
+  { key:'core', name:'能力层', tech:'Domain Logic', color:'var(--purple)', bg:'var(--purple-l)',
+    desc:'四个互不知情的纯能力模块，只通过宽表对话',
+    nodes:['data','fac','pre','ev'] },
+  { key:'src', name:'数据源层', tech:'Adapters', color:'var(--amber)', bg:'var(--amber-l)',
+    desc:'两种数据来源，产出结构完全一致的面板',
+    nodes:['synth','ak'] },
+  { key:'view', name:'呈现层', tech:'Render', color:'var(--red)', bg:'var(--red-l)',
+    desc:'把结果渲染成自包含 HTML 报告',
+    nodes:['rep'] }
+];
+
+/* ---------- 模块 ---------- */
+var MODULES = {
+  entry:{ file:'run_factor_lab.py', lines:77, layer:'入口层', name:'命令行入口',
+    gx:490, gy:48,
+    role:'把用户意图翻译成一次流水线执行。三个开关决定跑多远：默认全量跑；<code>--no-report</code> 只出 CSV；<code>--report-only</code> 直接读 <code>outputs/results.pkl</code> 只重生成 HTML。',
+    funcs:[['main()','解析参数 → 构造 Config → pipeline.run() → 打印汇总表 → report.build_report()']],
+    deps:['cfg','pipe','rep'],
+    usedBy:[],
+    io:['stdin: 命令行参数','stdout: 因子汇总表 + 产物路径','disk: outputs/*.csv, *.html'],
+    notes:['<code>--report-only</code> 是最实用的开关：调报告样式不用重跑 3–5 分钟计算。','入口负责"装配"，不负责"实现"——所有算法都在下层。']
+  },
+  cfg:{ file:'config.py', lines:45, layer:'横切', name:'全局配置',
+    gx:120, gy:170,
+    role:'全项目唯一的参数中心。一个 <code>@dataclass Config</code> 装下数据规模、评价口径、数据源、路径四类参数。',
+    funcs:[['Config','n_stocks / n_industries / start_date / end_date / warmup / seed'],['','horizons / ic_horizon / n_groups / rebalance / cost_bps / min_stocks'],['','source / akshare_index / akshare_start / akshare_end'],['data_dir / out_dir','@property，由 root 推导，不硬编码绝对路径']],
+    deps:[], usedBy:['entry','pipe','synth','ak','rep'],
+    io:['in: 入口传入的参数','out: 被逐层注入的配置对象'],
+    notes:['用<b>配置对象注入</b>而不是全局常量 → 同一个进程里能跑多套参数，单测能造小配置。','<code>root</code> 由 <code>__file__</code> 反推，所以仓库拷到任何路径都能跑。','<b>一处小不一致</b>：阈值 <code>PASS_IC/PASS_IR</code> 是 pipeline 的模块常量，没有进 Config。']
+  },
+  pipe:{ file:'pipeline.py', lines:145, layer:'编排层', name:'流水线编排',
+    gx:490, gy:170,
+    role:'整个系统的"总谱"。把 数据 → 因子 → 预处理 → 评价 → 落盘 五步串成 <code>run(cfg)</code>，并定义"什么算合格因子"。',
+    funcs:[['run(cfg)','主流程，返回 results 字典'],['_verdict(ic, icir)','按阈值给出 有效 / 反向有效 / 偏弱 / 无效'],['_save(cfg, results)','落盘 5 个 CSV + results.pkl']],
+    deps:['cfg','data','fac','pre','ev'],
+    usedBy:['entry','rep'],
+    io:['in: Config','out: results dict（summary / decay / corr / ic_series / inc_ic / navs / ground_truth）'],
+    notes:['阈值：<code>PASS_IC=0.03</code>、<code>PASS_IR=0.5</code>、<code>PASS_INC=0.02</code>。','<b>只编排、不计算</b>：所有数值都来自下层模块，pipeline 本身几乎没有数学。','这是唯一"知道全部模块"的地方——依赖都收口在这里，其他模块彼此解耦。']
+  },
+  data:{ file:'data.py', lines:25, layer:'能力层', name:'数据门面',
+    gx:120, gy:305,
+    role:'25 行，整个项目的"交换机"。按 <code>cfg.source</code> 分发到合成或真实数据，并保证两者返回<b>同构</b>的 panel。',
+    funcs:[['load_panel(cfg)','if synth → generate_panel；if akshare → load_akshare_panel']],
+    deps:['synth','ak'], usedBy:['pipe'],
+    io:['in: Config','out: panel dict（14 个键，见下）'],
+    notes:['<b>懒加载</b>：两个 <code>import</code> 写在函数体里 → 没装 akshare 也能跑合成数据。','契约（panel 的键）：<code>source / dates / codes / industry / close / open / high / low / volume / amount / turnover / float_mv / limit_flag / ground_truth</code>。','代价：没有抽象基类约束，两边键名一致靠人工保证。']
+  },
+  fac:{ file:'factors.py', lines:122, layer:'能力层', name:'因子定义',
+    gx:368, gy:305,
+    role:'14 个经典量价因子的定义 + 元数据。<code>compute_factors(panel)</code> 一次算出全部因子宽表。',
+    funcs:[['FACTOR_META','因子名 → (中文名, 分类)'],['MAX_WINDOW=60 / SLICE_LEN=61','最长回看窗口，决定合成数据预热期'],['compute_factors(panel, only=None)','返回 因子名 → 宽表']],
+    deps:[], usedBy:['pipe','synth'],
+    io:['in: close / high / low / volume / amount / turnover 宽表','out: 14 个因子宽表'],
+    notes:['<b>方向统一</b>：所有因子"值越大 = 预期收益越高"，所以低波 / 低换手 / 低 beta / 反转在定义时就取了负号。','<b>严格因果</b>：只用 <code>shift()</code> 与 <code>rolling()</code>，不碰未来数据。','<code>only</code> 参数是给合成数据用的加速开关——生成时只算真正有贡献的 6 个因子。','<b>市值不在清单里</b>：它内生于价格，只作中性化控制变量。']
+  },
+  pre:{ file:'preprocess.py', lines:108, layer:'能力层', name:'预处理',
+    gx:616, gy:305,
+    role:'因子入库前的三步标准动作：去极值 → 标准化 → 行业+市值中性化。',
+    funcs:[['winsorize_mad(df, n=3)','逐日截面截断到 中位数 ± 3×1.4826×MAD'],['cs_zscore(df)','逐日截面 Z-score（均值 0、标准差 1）'],['neutralize_all(...)','逐日截面 OLS：因子 ~ 行业哑变量 + log(市值) + 常数，取残差再标准化'],['preprocess(...)','三步串起来的一站式封装']],
+    deps:[], usedBy:['pipe','synth'],
+    io:['in: 因子宽表 + industry + log(市值)','out: 中性化后的因子宽表'],
+    notes:['用 MAD 而不是 3σ：MAD 本身抗极值，不会被离群点抬高门槛。','中性化是逐日循环 + <code>np.linalg.lstsq</code>，换来内存安全。','<code>size_only_industry</code> 参数预留给"规模因子本身不做市值中性化"的场景。','<code>min_obs=20</code>：当日有效标的太少就跳过，避免病态回归。']
+  },
+  ev:{ file:'evaluate.py', lines:236, layer:'能力层', name:'评价',
+    gx:864, gy:305,
+    role:'项目里算法密度最高的模块。6 类标准检验，全部是<b>无状态纯函数</b>。',
+    funcs:[['forward_return(close, h)','未来 h 日收益 = close.shift(-h)/close - 1'],['rank_ic_series(...)','逐日截面 Spearman 相关'],['ic_stats(ic)','IC 均值 / 标准差 / ICIR / IC 胜率 / t 值'],['ic_decay(...)','在 1/2/3/5/10/20 日持有期上各算一次 IC'],['layered_backtest(...)','分 5 组、组内等权、按 rebalance 调仓、扣换手成本、剔除涨跌停'],['perf_stats(ret)','年化收益 / 年化波动 / Sharpe / 最大回撤'],['factor_corr_matrix(...)','池化 Pearson 相关矩阵'],['incremental_ic(...)','贪心正交化后的增量 IC —— 全篇的落点']],
+    deps:[], usedBy:['pipe'],
+    io:['in: 因子宽表 + close + 参数','out: IC 序列 / 净值 / 统计量 / 矩阵'],
+    notes:['<b>信号 t 日收盘形成、t+1 起持有</b>，回测里先算持仓收益再调仓，杜绝前向偏差。','<code>_row_corr</code> 逐行算相关系数，是为了带 <code>min_n</code> 样本约束。','<code>incremental_ic</code> 是 O(K²) 次截面回归——14 个因子可接受，100 个就要换算法。']
+  },
+  synth:{ file:'synth.py', lines:181, layer:'数据源层', name:'合成数据生成器',
+    gx:120, gy:450,
+    role:'整个项目最巧的一块。生成带真实截面结构的 A 股日频面板，并<b>内嵌已知的"因子-收益"关系</b>，让流水线结论能对标准答案。',
+    funcs:[['GROUND_TRUTH','因子名 → 收益系数（0 表示该因子在生成过程里无效）'],['generate_panel(cfg)','生成并缓存 panel'],['_make_codes(n, rng)','生成形似 A 股的 6 位代码']],
+    deps:['cfg','fac','pre'], usedBy:['data'],
+    io:['in: Config（规模 / 区间 / seed）','out: panel dict（含 ground_truth 与 dgp_signal）'],
+    notes:['核心公式：<code>r(t) = β·市场(t) + 行业(t) + Σ bₖ·zₖ(t-1) + 特质(t)</code>，其中 zₖ 是 t-1 日因子的截面 Z 值。','复刻了真实结构：行业分组、市值对数正态、换手持久性、GARCH 式波动聚集、±10% 截断、厚尾（t 分布）。','<b>数据层反向依赖因子层</b>：为了用同一套因子语言表达"标准答案"，synth 主动 import factors 与 cs_zscore。这是有意的取舍。','按参数指纹缓存 pkl，重复运行秒开。']
+  },
+  ak:{ file:'akshare_source.py', lines:85, layer:'数据源层', name:'真实数据适配器',
+    gx:368, gy:450,
+    role:'用 AkShare 拉沪深 300 成分股的日频行情，转成与合成数据<b>同构</b>的面板。下游一行都不用改。',
+    funcs:[['_require_akshare()','未安装时给出清晰报错'],['load_akshare_panel(cfg)','拉成分股 → 逐股取日线 → 拼宽表']],
+    deps:['cfg'], usedBy:['data'],
+    io:['in: Config（指数代码 / 区间）','out: 同构 panel'],
+    notes:['默认<b>后复权 hfq</b>，保证价格序列连续、收益可算。','流通市值 AkShare 未直接给历史股本 → 用 <code>成交额 ÷ 换手率</code> 反推近似股本。','涨跌停用 <code>|涨跌幅| ≥ 9.8%</code> 近似，未区分 ST 与一字板。','行业字段给中性默认值，真实使用建议换成自家行业表。','逐股串行拉取较慢，这是真实数据路径的主要耗时。']
+  },
+  rep:{ file:'report.py', lines:636, layer:'呈现层', name:'HTML 报告生成',
+    gx:860, gy:170,
+    role:'把 results 渲染成一份自包含、可双击打开、可邮件发送的 HTML 报告。项目里行数最多的模块。',
+    funcs:[['_build_payload(results)','Python 对象 → 前端 JSON（含非有限值清洗）'],['_summary_stats(results)','生成结论文案，含"留存集 vs 真因子集"的对照'],['_table_html(results)','因子汇总表'],['JS_BODY + HTML_TEMPLATE','内联 JS 与模板'],['build_report(results, cfg)','拼装、写盘，并额外写出 _report_check.js 供语法自检']],
+    deps:['cfg','pipe'], usedBy:['entry'],
+    io:['in: results dict','out: outputs/factor_health_report.html（约 640 KB）'],
+    notes:['<b>数据与视图分离</b>：Python 只产出 JSON，6 张图全部由前端 ECharts 渲染。','交付前写一份 <code>_report_check.js</code>，交给 <code>node --check</code> 做语法自检。','<b>踩过的坑</b>：JS 里引用了 Python 侧变量导致运行时 ReferenceError，而 <code>node --check</code> 查不出来 → 必须补一次运行时冒烟测试。','报告只依赖 pipeline 的两个阈值常量，不碰任何计算逻辑。']
+  }
+};
+
+/* ---------- 依赖边（A → B 表示 A 依赖 B） ---------- */
+var EDGES = [
+  ['entry','pipe'],['entry','cfg'],['entry','rep'],
+  ['pipe','cfg'],['pipe','data'],['pipe','fac'],['pipe','pre'],['pipe','ev'],
+  ['rep','pipe'],['rep','cfg'],
+  ['data','synth'],['data','ak'],
+  ['synth','fac'],['synth','pre'],['synth','cfg'],
+  ['ak','cfg']
+];
+var LAZY = [['data','synth'],['data','ak']];   /* 懒加载边，画虚线 */
+
+/* ---------- 数据流 ---------- */
+var FLOW = [
+  { n:1, title:'解析参数 · 装配配置', stage:'入口', owner:'entry → cfg',
+    detail:'命令行参数被翻译成一个 <code>Config</code> 对象。此后所有模块都从这一个对象读参数，不再有第二个参数来源。',
+    input:'命令行参数', output:'Config 实例', dt:'Config',
+    code:'cfg = Config(source="synth", n_stocks=300, seed=20261009)' },
+  { n:2, title:'加载行情面板', stage:'数据', owner:'pipeline → data → synth/akshare',
+    detail:'数据门面按 <code>source</code> 分发。合成路径会先查 pkl 缓存，命中就直接反序列化；未命中才跑仿真。两条路径产出的 panel 键完全一致。',
+    input:'Config', output:'panel dict', dt:'Dict[str, DataFrame]',
+    code:'panel = load_panel(cfg)\n# close/open/high/low/volume/amount/turnover/float_mv/limit_flag/industry/ground_truth' },
+  { n:3, title:'计算 14 个因子', stage:'因子', owner:'pipeline → factors',
+    detail:'一次性把 6 张行情宽表变成 14 张因子宽表。全部用 <code>rolling</code> / <code>shift</code> / <code>pct_change</code> 表达，天然严格因果。',
+    input:'行情宽表', output:'14 张因子宽表', dt:'Dict[str, DataFrame]',
+    code:'raw = compute_factors(panel)\n# {"rev_5": df, "vol_20": df, ...}  每个 df: index=交易日, columns=股票代码' },
+  { n:4, title:'三步预处理', stage:'预处理', owner:'pipeline → preprocess',
+    detail:'先 MAD 去极值，再截面 Z-score，最后逐日截面 OLS 剥离行业与市值暴露。第三步是"伪 alpha"的照妖镜——很多因子在这一步原形毕露。',
+    input:'原始因子宽表 + 行业 + log(市值)', output:'中性化因子宽表', dt:'Dict[str, DataFrame]',
+    code:'wins = {nm: winsorize_mad(df) for nm, df in raw.items()}\nstd  = {nm: cs_zscore(df)     for nm, df in wins.items()}\nneu  = neutralize_all(std, panel["industry"], np.log(panel["float_mv"]))' },
+  { n:5, title:'六类有效性检验', stage:'评价', owner:'pipeline → evaluate',
+    detail:'对每个因子依次算：IC/IR 统计量、分层回测净值、多空绩效、Top 组换手；再算全局的 IC 衰减、相关性矩阵，以及最关键的增量 IC。',
+    input:'中性化因子 + close', output:'统计量 / 净值 / 矩阵', dt:'dict + DataFrame',
+    code:'ic  = rank_ic_series(neu[nm], fwd_main)          # IC 时序\nbt  = layered_backtest(neu[nm], close, n_groups=5)  # 分层回测\ninc = incremental_ic(neu, close, horizon=5)          # 增量 IC（去冗余）' },
+  { n:6, title:'汇总与落盘', stage:'编排', owner:'pipeline',
+    detail:'把每个因子的所有指标收成一张汇总表（按 |中性化 IC| 降序），连同 IC 时序、衰减、相关性一起落盘：5 个 CSV 便于人工复核，1 个 pkl 便于复用。',
+    input:'各检验结果', output:'summary + 5 CSV + results.pkl', dt:'DataFrame / CSV / pickle',
+    code:'summary.sort_values("abs_ic", ascending=False)\n# outputs/: summary.csv, ic_decay.csv, factor_corr.csv, ic_series.csv, long_short_nav.csv, results.pkl' },
+  { n:7, title:'渲染 HTML 报告', stage:'呈现', owner:'entry → report',
+    detail:'results 被压成一段 JSON 内联进 HTML，6 张交互图表全部在前端用 ECharts 渲染。产出单文件，双击即看。',
+    input:'results dict', output:'factor_health_report.html', dt:'HTML + inline JSON',
+    code:'payload = _build_payload(results)          # Python → JSON\nhtml    = HTML_TEMPLATE.format(..., js=data_js + JS_BODY)\n# 同时写出 _report_check.js 供 node --check 自检' }
+];
+
+/* ---------- 关键设计决策 ---------- */
+var DECISIONS = [
+  { idx:'01', title:'宽表（DataFrame）作为模块间唯一契约',
+    decision:'所有模块之间只传"index = 交易日、columns = 股票代码"的宽表。数据层、因子层、预处理、评价、报告都只认这一种形状。',
+    plus:['模块可以任意替换、单独测试——因子不知道谁在评价它，评价不知道数据从哪来','调试极其直观：拿到任何一个中间产物，<code>df.head()</code> 就能看懂','新增因子只需在 <code>compute_factors</code> 里加几行，下游零改动'],
+    minus:['内存是 O(T×N)：本项目 300 只 × 1304 天已经占 30 MB，全 A 股会直接爆','不适合超大规模（5000 只 × 5000 天）','缺少类型约束，字段名写错只能在运行时发现'],
+    ref:'生产系统多改用长表 / 列存（Parquet 分区）或数据库，牺牲一点直观换可扩展性。' },
+  { idx:'02', title:'合成数据内嵌 ground truth',
+    decision:'合成数据的每日收益显式由"前一日因子的截面 Z 值 × 已知系数"生成，系数表 <code>GROUND_TRUTH</code> 就写在代码里。',
+    plus:['流水线的结论可以直接对齐标准答案 → 等于给整条链路做端到端自检','报告里的"实测 IC vs ground truth"散点图就是干这个的，一眼看出还原度','可以故意把某些因子的系数设为 0，专门检验流水线能否识别出"假因子"'],
+    minus:['信噪比高于真实市场，ICIR 系统性偏高（本项目 0.8–0.95）','不能用来下任何投资结论','有"对着答案调流水线"的过拟合风险'],
+    ref:'真实研究里没有 ground truth，只能靠样本外 / walk-forward 来建立信心。' },
+  { idx:'03', title:'数据源用门面 + 懒加载，而不是继承体系',
+    decision:'<code>data.load_panel</code> 里一个 if/else 分发；两个数据源各自独立，<code>import</code> 写在函数体内。',
+    plus:['没装 akshare 也能完整跑通合成数据路径，降低上手门槛','没有抽象基类的样板代码，新增数据源只需加一个分支','两条路径对下游完全透明——切真实数据只改一个参数'],
+    minus:['没有接口约束，两边 panel 键一致靠人工保证','分支多了之后 if/else 会失控'],
+    ref:'规模变大时应收敛为显式 Protocol / 抽象基类，把"契约"变成可检查的东西。' },
+  { idx:'04', title:'配置以 dataclass 注入，不用全局常量',
+    decision:'<code>Config</code> 在入口构造一次，之后逐层作为参数传入。没有任何模块 import 全局配置单例。',
+    plus:['随机种子进配置 → 结果可复现，这是研究代码的底线','同一进程可跑多套参数（多区间 / 多股票池对比）','单测可以造一个 20 只 × 60 天的小配置，秒级跑完'],
+    minus:['几乎每个函数都要多带一个 <code>cfg</code> 参数','阈值常量（PASS_IC/PASS_IR）没进 Config，出现了一处不一致'],
+    ref:'项目再大就该上配置分层（默认值 / 环境 / 实验），或 pydantic 做校验。' },
+  { idx:'05', title:'严格因果 + 涨跌停剔除',
+    decision:'因子只用 t 日及之前数据；收益取 t→t+N 前向；信号 t 日收盘形成、t+1 起持有；调仓日剔除当日涨跌停个股。',
+    plus:['从源头杜绝前向偏差——这是量化研究最容易、也最致命的错误','剔除涨跌停避免"回测买得到、实盘买不到"的虚假收益','回测里先算持仓收益、收盘后才调仓，顺序与实盘一致'],
+    minus:['实现比"向量化一把梭"啰嗦得多','涨跌停用价格阈值近似，没有区分 ST、一字板、停牌','没有处理复牌首日、新股等边界'],
+    ref:'更严格的做法需要逐日的可交易性表（停牌 / ST / 涨跌停 / 流动性），而不是单一阈值。' },
+  { idx:'06', title:'增量 IC（贪心正交化）作为去冗余核心',
+    decision:'按 |IC| 降序依次纳入因子；每个因子先对"已纳入的全部因子"做截面回归、取残差，再算残差的 IC。',
+    plus:['直接量化"去掉冗余后还剩多少信息"，而不是只看单因子 IC','能把波动类"马甲因子"照出来：单因子 IC 0.05，正交化后塌到 0.02 以下','是本项目最值钱的产出——14 个候选里只有 4 个是独立维度'],
+    minus:['贪心算法，结果依赖纳入顺序','O(K²) 次截面回归，因子多了会慢','对高度相关的因子，谁先纳入谁"抢功"'],
+    ref:'生产上更常用对称正交（symmetric orthogonalization）、PCA 或聚类去冗余，避免顺序依赖。' },
+  { idx:'07', title:'结果缓存 + 计算与渲染分离',
+    decision:'<code>run()</code> 把完整结果 pickle 到 <code>results.pkl</code>；<code>--report-only</code> 直接读它重建 HTML，跳过全部计算。',
+    plus:['改报告样式不用重跑 3–5 分钟计算，迭代速度差一个数量级','计算产物可归档、可复核，别人能拿你的 pkl 复现同样的报告','CSV 与 pkl 并存：前者给人看，后者给程序用'],
+    minus:['pickle 与代码版本强耦合——字段改了旧 pkl 直接失效','没有版本号 / 校验，出问题只能重跑'],
+    ref:'更稳的做法是给产物加 schema 版本，或改用 Parquet / JSON 这类自描述格式。' },
+  { idx:'08', title:'自包含 HTML：Python 只出 JSON，图表全在前端',
+    decision:'Python 侧只做数据整形，把结果 <code>json.dumps</code> 内联进 <code>&lt;script&gt;</code>；6 张图全部由前端 ECharts 渲染。',
+    plus:['单文件产出，可双击打开、可邮件发送、可离线查看','报告与计算彻底解耦——同一份数据能出多种版式','前端可交互（缩放 / 悬停 / 切换），比静态图信息量大得多'],
+    minus:['单文件 640 KB，偏大','依赖 ECharts CDN，离线环境需要另想办法','Python 变量无法直接被 JS 引用——本项目就踩过 ReferenceError，而 <code>node --check</code> 查不出来'],
+    ref:'交付前必须做"语法自检 + 运行时冒烟"双检，这是本项目沉淀下来的工程纪律。' }
+];
+
+/* ---------- 知识清单 ---------- */
+var THEMES = [
+  { key:'A', name:'量化因子研究', color:'#A32D2D', bg:'#FCEBEB',
+    desc:'决定"你看不看得懂报告里的数字"',
+    items:[
+      { id:'A1', name:'IC / RankIC 的定义与解读', prio:'P0', why:'全篇的核心指标。IC 是因子值与未来收益的截面相关系数，RankIC 用秩相关，抗极值。', path:'先理解"截面相关"，再看本项目 rank_ic_series 的实现' },
+      { id:'A2', name:'ICIR、t 值、IC 胜率', prio:'P0', why:'IC 均值只说明方向，ICIR = 均值/标准差才说明稳定性。t 值 = ICIR × √n。', path:'对照 evaluate.ic_stats，手算一个因子的三个数' },
+      { id:'A3', name:'前向收益与因果（杜绝前向偏差）', prio:'P0', why:'量化研究最致命的错误。用 t 日之后的信息做 t 日的决策，回测再漂亮也是幻觉。', path:'读 forward_return 与 layered_backtest 的时序安排' },
+      { id:'A4', name:'MAD 去极值与截面 Z-score', prio:'P0', why:'不处理极端值，少数股票会主导整个 IC；不标准化，不同量纲因子无法比较。', path:'读 preprocess.winsorize_mad，理解为什么用 1.4826×MAD' },
+      { id:'A5', name:'行业 + 市值中性化（残差化）', prio:'P0', why:'很多"新因子"其实只是行业或市值的马甲。中性化就是把风格暴露剥离掉。', path:'读懂 neutralize_all 里的逐日 OLS 与取残差' },
+      { id:'A6', name:'分层回测与多空组合', prio:'P0', why:'IC 是统计量，净值是"钱"的语言。分 5 组看单调性，多空 spread 看纯 alpha。', path:'读 layered_backtest，注意组内等权与调仓逻辑' },
+      { id:'A7', name:'换手率与交易成本建模', prio:'P1', why:'高 IC 因子常常换手极高，扣掉成本后归零。成本是实盘分水岭。', path:'看 cost_bps 如何按换手率扣减' },
+      { id:'A8', name:'IC 衰减与持有期选择', prio:'P1', why:'因子有效期不同。IC 衰减曲线决定该持有几天、多久调一次仓。', path:'读 ic_decay，在 1/2/3/5/10/20 日上对比' },
+      { id:'A9', name:'因子相关性与共线性', prio:'P1', why:'20 个因子可能只是 3 个维度。相关性矩阵是去冗余的第一步。', path:'读 factor_corr_matrix，观察波动类因子的高相关' },
+      { id:'A10', name:'正交化与增量 IC 去冗余', prio:'P1', why:'本项目的落点。判断一个因子"独立价值"的唯一办法。', path:'读 incremental_ic 与 _residualize' },
+      { id:'A11', name:'A 股微观结构：涨跌停 / 停牌 / 复权 / 一字板', prio:'P1', why:'A 股特有的约束，直接决定回测能不能落地。', path:'对照 akshare_source 的近似处理，思考哪里不够' }
+    ]},
+  { key:'B', name:'Python 数据工程', color:'#5B4B9E', bg:'#EFEBFA',
+    desc:'决定"你能不能改得动代码"',
+    items:[
+      { id:'B1', name:'pandas 宽表、索引对齐与广播', prio:'P0', why:'整个项目的通用语言。索引对齐错了，结果全错且不报错。', path:'读 factors.py 里 df 与 Series 的运算' },
+      { id:'B2', name:'rolling / shift / pct_change 时间序列算子', prio:'P0', why:'14 个因子几乎全部由这三个算子拼出来。', path:'逐个因子对照实现，理解窗口的含义' },
+      { id:'B3', name:'numpy 向量化与布尔掩码', prio:'P0', why:'评价层全是向量化 + 掩码，这是性能与表达力的来源。', path:'读 evaluate._row_corr 的掩码逻辑' },
+      { id:'B4', name:'最小二乘回归与残差（np.linalg.lstsq）', prio:'P1', why:'中性化与正交化的数学核心就是"回归取残差"。', path:'读 neutralize_all 与 _residualize 的构造矩阵' },
+      { id:'B5', name:'序列化与缓存（pickle / CSV / utf-8-sig）', prio:'P1', why:'缓存让迭代快一个数量级；utf-8-sig 让 Excel 打开 CSV 不乱码。', path:'读 pipeline._save 与 synth 的缓存逻辑' },
+      { id:'B6', name:'内存与性能：宽表的内存放大', prio:'P2', why:'知道现在的做法在哪里会撞墙，才谈得上优化。', path:'估算 5000 只 × 5000 天的内存占用' }
+    ]},
+  { key:'C', name:'软件架构与工程实践', color:'#0F6E6E', bg:'#E4F2F2',
+    desc:'决定"这个项目能不能长大"',
+    items:[
+      { id:'C1', name:'分层架构与单向依赖', prio:'P0', why:'入口 → 编排 → 能力 → 数据源 → 呈现。依赖方向单一，才改得动。', path:'对照架构总览图，验证每条依赖的方向' },
+      { id:'C2', name:'门面 / 策略 / 适配器模式', prio:'P1', why:'数据门面与两个适配器，是"可替换数据源"的实现方式。', path:'读 data.py 与 akshare_source.py' },
+      { id:'C3', name:'依赖注入与配置对象', prio:'P1', why:'不用全局变量，才能可复现、可并行、可测试。', path:'追一遍 cfg 从入口到各层的传递' },
+      { id:'C4', name:'模块间契约设计（宽表即接口）', prio:'P0', why:'契约定得好，模块才能真正解耦。', path:'列出 panel 的全部键，想想为什么是这些' },
+      { id:'C5', name:'可复现性：随机种子与确定性', prio:'P1', why:'研究代码的底线——同样的输入必须给出同样的输出。', path:'固定 seed 跑两次，diff 结果' },
+      { id:'C6', name:'交付前自检（node --check + 运行时冒烟）', prio:'P1', why:'语法检查抓不到引用错误。本项目就靠这条纪律抓出过一个真 bug。', path:'读 report.build_report 里写 _report_check.js 的部分' }
+    ]},
+  { key:'D', name:'可视化与前端', color:'#185FA5', bg:'#E7F0FA',
+    desc:'决定"结果能不能被人看懂"',
+    items:[
+      { id:'D1', name:'ECharts 常用图型', prio:'P1', why:'折线 / 柱状 / 散点 / 热力图 / 多轴，覆盖了报告的全部图表。', path:'打开 factor_health_report.html，逐个对照配置' },
+      { id:'D2', name:'数据与视图分离（Python → JSON → JS）', prio:'P1', why:'Python 只整形、JS 只渲染，两边都能独立改。', path:'读 _build_payload 的输出结构' },
+      { id:'D3', name:'响应式布局（grid / media query / viewport）', prio:'P2', why:'研究报告经常要在手机上瞄一眼。', path:'参考本页的断点设计（1024 / 640）' },
+      { id:'D4', name:'交互设计：hover 预览、click 详情', prio:'P2', why:'信息密度高的页面，必须靠交互分层。', path:'参考本页的详情面板实现' }
+    ]},
+  { key:'E', name:'数据获取与接口', color:'#BA7517', bg:'#FAEEDA',
+    desc:'决定"能不能接到真实世界"',
+    items:[
+      { id:'E1', name:'AkShare 接口与常见坑', prio:'P2', why:'免费好用，但接口名在不同版本间会变。', path:'读 akshare_source，注意异常兜底' },
+      { id:'E2', name:'复权（前复权 / 后复权）与价格连续性', prio:'P1', why:'不复权的价格序列会在除权日跳空，收益全是假的。', path:'理解为什么本项目默认 hfq' },
+      { id:'E3', name:'指数成分股与股票池构建', prio:'P2', why:'股票池决定研究范围，也决定幸存者偏差。', path:'看 index_stock_cons_csindex 的用法' }
+    ]},
+  { key:'F', name:'研究严谨性', color:'#6B7280', bg:'#F1F0EC',
+    desc:'决定"结论可不可信"',
+    items:[
+      { id:'F1', name:'样本外验证与 walk-forward', prio:'P1', why:'单一样本区间的漂亮结果，大概率是过拟合。', path:'想想怎么把本项目改造成滚动验证' },
+      { id:'F2', name:'多重检验与数据窥探', prio:'P1', why:'试 100 个因子，总有 5 个"显著"。这是因子挖掘最大的陷阱。', path:'理解增量 IC 为什么比单因子 IC 可信' },
+      { id:'F3', name:'合成数据与真实数据的边界', prio:'P0', why:'合成数据只能验证"流水线对不对"，不能回答"因子赚不赚钱"。', path:'读 README 的"关于合成数据"一节' }
+    ]}
+];
+
+/* ---------- 学习路径 ---------- */
+var STAGES = [
+  { n:1, title:'读懂因子', sub:'目标：能解释报告里每一个数字的含义',
+    desc:'先建立"因子研究在说什么"的语感。这一步不写代码，只读报告与文档。',
+    tags:['A1','A2','A3','A4','F3'] },
+  { n:2, title:'跑通流水线', sub:'目标：能自己加一个因子、改一个参数',
+    desc:'掌握数据处理的通用语言，然后在 factors.py 里动手加第 15 个因子，看它能不能通过体检。',
+    tags:['B1','B2','B3','C1','C4'] },
+  { n:3, title:'进阶检验', sub:'目标：能独立做一次因子入库评审',
+    desc:'从"算得出 IC"进阶到"判断这个因子值不值得入库"。中性化、分层回测、去冗余是核心。',
+    tags:['A5','A6','A7','A8','A9','A10','B4'] },
+  { n:4, title:'工程化', sub:'目标：把它变成团队可用的因子库',
+    desc:'理解架构为什么这么切，学会用配置、缓存、自检把研究代码变成可靠的工具。',
+    tags:['C2','C3','C5','C6','B5','D1','D2'] },
+  { n:5, title:'生产化', sub:'目标：接真实数据，做样本外验证',
+    desc:'从合成数据走向真实市场，并建立对"过拟合"的免疫力。这一步没有标准答案。',
+    tags:['A11','E1','E2','E3','F1','F2','B6','D3','D4'] }
+];
+
+/* ============================================================
+   工具
+   ============================================================ */
+var $ = function(s){ return document.querySelector(s); };
+var esc = function(s){ return String(s==null?'':s); };
+
+function prioClass(p){ return p==='P0' ? 'p0' : p==='P1' ? 'p1' : 'p2'; }
+function layerOf(id){
+  for (var i=0;i<LAYERS.length;i++){ if (LAYERS[i].nodes.indexOf(id)>=0) return LAYERS[i]; }
+  return null;
+}
+
+/* ============================================================
+   详情面板
+   ============================================================ */
+var dTitle=$('#d-title'), dSub=$('#d-sub'), dBody=$('#d-body');
+var detailEl=$('#detail'), backdrop=$('#backdrop');
+
+function openPanel(){ detailEl.classList.add('open'); backdrop.classList.add('on'); }
+function closePanel(){ detailEl.classList.remove('open'); backdrop.classList.remove('on'); }
+$('#d-close').addEventListener('click', closePanel);
+backdrop.addEventListener('click', closePanel);
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') closePanel(); });
+
+function isMobile(){ return window.matchMedia('(max-width:1024px)').matches; }
+
+function setDetail(title, sub, html, forceOpen){
+  dTitle.textContent = title;
+  dSub.textContent = sub;
+  dBody.innerHTML = html;
+  dBody.scrollTop = 0;
+  if (isMobile() || forceOpen) openPanel();
+}
+function clearSel(){
+  document.querySelectorAll('.node.sel,.gnode.sel,.step.sel,.dec.sel,.kitem.sel')
+    .forEach(function(e){ e.classList.remove('sel'); });
+}
+
+function kv(rows){
+  return rows.map(function(r){
+    return '<div class="kv"><b>'+r[0]+'</b><span>'+r[1]+'</span></div>';
+  }).join('');
+}
+
+/* ---------- 详情：模块 ---------- */
+function showModule(id){
+  var m = MODULES[id]; if(!m) return;
+  var L = layerOf(id);
+  var funcs = m.funcs.map(function(f){
+    return '<li><code>'+f[0]+'</code>'+(f[1]?' — '+f[1]:'')+'</li>';
+  }).join('');
+  var nameOf = function(k){ return '<code>' + (MODULES[k] ? MODULES[k].file : k) + '</code>'; };
+  var deps = m.deps.length ? m.deps.map(nameOf).join('、') : '（无，纯逻辑模块）';
+  var used = m.usedBy.length ? m.usedBy.map(nameOf).join('、') : '（无，顶层入口）';
+  var html =
+    '<div class="sec"><div class="sec-t">职责</div><p>'+m.role+'</p></div>'+
+    '<div class="sec"><div class="sec-t">关键接口</div><ul>'+funcs+'</ul></div>'+
+    '<div class="sec"><div class="sec-t">依赖 / 被依赖</div>'+
+      kv([['所属层', (L? L.name : '横切关注点')],
+          ['依赖', deps],['被依赖', used],
+          ['行数', m.lines+' 行']])+'</div>'+
+    '<div class="sec"><div class="sec-t">输入 / 输出</div><ul>'+
+      m.io.map(function(x){ return '<li>'+x+'</li>'; }).join('')+'</ul></div>'+
+    '<div class="sec"><div class="sec-t">值得注意</div><ul class="plus">'+
+      m.notes.map(function(x){ return '<li>'+x+'</li>'; }).join('')+'</ul></div>';
+  setDetail(m.file, L ? L.name+' · '+m.name : m.name, html);
+}
+
+/* ---------- 详情：数据流 ---------- */
+function showStep(i){
+  var s = FLOW[i]; if(!s) return;
+  var html =
+    '<div class="sec"><div class="sec-t">这一步在做什么</div><p>'+s.detail+'</p></div>'+
+    '<div class="sec"><div class="sec-t">输入 / 输出</div>'+
+      kv([['输入', s.input],['输出', s.output],['数据结构', '<code>'+s.dt+'</code>'],['负责人', '<code>'+s.owner+'</code>']])+'</div>'+
+    '<div class="sec"><div class="sec-t">对应代码</div><div class="codeblk">'+
+      s.code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div></div>';
+  setDetail('阶段 '+s.n+' · '+s.title, s.stage+' 阶段', html);
+}
+
+/* ---------- 详情：决策 ---------- */
+function showDecision(i){
+  var d = DECISIONS[i]; if(!d) return;
+  var html =
+    '<div class="sec"><div class="sec-t">决策</div><p>'+d.decision+'</p></div>'+
+    '<div class="sec"><div class="sec-t">换来了什么</div><ul class="plus">'+
+      d.plus.map(function(x){ return '<li>'+x+'</li>'; }).join('')+'</ul></div>'+
+    '<div class="sec"><div class="sec-t">付出了什么</div><ul class="minus">'+
+      d.minus.map(function(x){ return '<li>'+x+'</li>'; }).join('')+'</ul></div>'+
+    '<div class="sec"><div class="sec-t">真实工程里怎么做</div><p>'+d.ref+'</p></div>';
+  setDetail('决策 '+d.idx, '设计取舍', html);
+}
+
+/* ---------- 详情：知识点 ---------- */
+function showK(item){
+  var theme = null;
+  for (var i=0;i<THEMES.length;i++){
+    if (THEMES[i].items.some(function(x){ return x.id===item.id; })) { theme = THEMES[i]; break; }
+  }
+  var html =
+    '<div class="sec"><div class="sec-t">为什么要学</div><p>'+item.why+'</p></div>'+
+    '<div class="sec"><div class="sec-t">在本项目里怎么练</div><p>'+item.path+'</p></div>'+
+    '<div class="sec"><div class="sec-t">归属</div>'+
+      kv([['主题', theme? theme.name : '—'],
+          ['优先级', '<span class="prio '+prioClass(item.prio)+'">'+item.prio+'</span>'],
+          ['编号', '<code>'+item.id+'</code>']])+'</div>';
+  setDetail(item.name, theme ? theme.name+' · '+item.id : item.id, html);
+}
+
+/* ============================================================
+   视图 1：架构总览（分层）
+   ============================================================ */
+function renderOverview(){
+  var html = '';
+  LAYERS.forEach(function(L, i){
+    var nodes = L.nodes.map(function(id){
+      var m = MODULES[id];
+      return '<button class="node" data-mod="'+id+'" style="border-left-color:'+L.color+'">'+
+             '<span class="nf">'+m.file+'</span><span class="nd">'+m.name+' · '+m.lines+' 行</span></button>';
+    }).join('');
+    html += '<div class="layer">'+
+              '<div class="layer-tag" style="background:'+L.bg+';border-color:'+L.color+'33">'+
+                '<b style="color:'+L.color+'">'+L.name+'</b><span>'+L.tech+'</span></div>'+
+              '<div class="layer-body">'+nodes+'</div>'+
+            '</div>';
+    if (i < LAYERS.length-1) html += '<div class="arrowdown">↓</div>';
+  });
+  html += '<div class="crosscut">'+
+            '<span class="lbl">横切关注点</span>'+
+            '<button class="node" data-mod="cfg" style="border-left-color:var(--gray);flex:0 1 220px">'+
+              '<span class="nf">config.py</span><span class="nd">全局配置 · 被几乎每个模块依赖</span></button>'+
+            '<span style="font-size:12px;color:var(--ink3);flex:1 1 220px;min-width:180px">'+
+              '它不属于任何一层，而是被各层注入使用——这是"依赖注入"最直观的体现。</span>'+
+          '</div>';
+  return '<section class="card" id="overview">'+
+    '<div class="card-h"><h2><span class="num">01</span>架构总览：五层单向依赖</h2></div>'+
+    '<div class="card-sub">依赖方向永远向下：上层知道下层，下层完全不知道上层。点击任意模块查看它的职责、接口与依赖。</div>'+
+    '<div class="card-b">'+html+'</div></section>';
+}
+
+/* ============================================================
+   视图 2：模块依赖图（SVG）
+   ============================================================ */
+function renderGraph(){
+  var NW=158, NH=50, R=10;
+  var svg = '<svg class="graph" viewBox="0 0 980 530" role="img" aria-label="模块依赖关系图">';
+  svg += '<defs><marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'+
+         '<path d="M0,1 L9,5 L0,9 z" fill="#CFCBC0"/></marker>'+
+         '<marker id="arwB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'+
+         '<path d="M0,1 L9,5 L0,9 z" fill="#185FA5"/></marker></defs>';
+
+  /* 边 */
+  EDGES.forEach(function(e, i){
+    var a = MODULES[e[0]], b = MODULES[e[1]];
+    var lazy = LAZY.some(function(l){ return l[0]===e[0] && l[1]===e[1]; });
+    /* 起点/终点取节点边缘，竖直方向优先 */
+    var dx = b.gx - a.gx, dy = b.gy - a.gy;
+    var sx, sy, tx, ty;
+    if (Math.abs(dy) >= Math.abs(dx)) {          /* 纵向为主 */
+      sy = a.gy + (dy>0 ? NH/2 : -NH/2);
+      ty = b.gy + (dy>0 ? -NH/2 : NH/2);
+      sx = a.gx; tx = b.gx;
+    } else {                                      /* 横向为主 */
+      sx = a.gx + (dx>0 ? NW/2 : -NW/2);
+      tx = b.gx + (dx>0 ? -NW/2 : NW/2);
+      sy = a.gy; ty = b.gy;
+    }
+    var mx = (sx+tx)/2, my = (sy+ty)/2;
+    var path;
+    if (Math.abs(dy) >= Math.abs(dx)) {
+      path = 'M'+sx+','+sy+' C'+sx+','+my+' '+tx+','+my+' '+tx+','+ty;
+    } else {
+      path = 'M'+sx+','+sy+' C'+mx+','+sy+' '+mx+','+ty+' '+tx+','+ty;
+    }
+    svg += '<path class="gedge'+(lazy?' lazy':'')+'" data-from="'+e[0]+'" data-to="'+e[1]+'" d="'+path+'"'+
+           (lazy?' stroke-dasharray="4 4"':'')+'/>';
+  });
+
+  /* 节点 */
+  Object.keys(MODULES).forEach(function(id){
+    var m = MODULES[id];
+    var x = m.gx - NW/2, y = m.gy - NH/2;
+    var L = layerOf(id);
+    var stroke = L ? L.color : 'var(--gray)';
+    svg += '<g class="gnode" data-mod="'+id+'" tabindex="0" role="button" aria-label="'+m.file+'">'+
+      '<rect x="'+x+'" y="'+y+'" width="'+NW+'" height="'+NH+'" rx="'+R+'" stroke="'+stroke+'" stroke-opacity=".45"/>'+
+      '<text x="'+m.gx+'" y="'+(m.gy-3)+'" text-anchor="middle">'+m.file+'</text>'+
+      '<text class="sub" x="'+m.gx+'" y="'+(m.gy+14)+'" text-anchor="middle">'+m.lines+' 行 · '+m.name+'</text>'+
+      '</g>';
+  });
+  svg += '</svg>';
+
+  return '<section class="card" id="modules">'+
+    '<div class="card-h"><h2><span class="num">02</span>模块依赖关系</h2></div>'+
+    '<div class="card-sub">箭头方向 = 依赖方向（A → B 表示 A 的代码里 import 了 B）。虚线是懒加载边。悬停任一模块可高亮它的全部依赖，点击查看细节。</div>'+
+    '<div class="card-b"><div class="graphwrap">'+svg+'</div>'+
+    '<div class="legend"><span><i></i>普通依赖</span><span><i class="dash"></i>懒加载（函数体内 import）</span>'+
+    '<span>节点描边颜色 = 所属层</span></div></div></section>';
+}
+
+/* ============================================================
+   视图 3：数据流
+   ============================================================ */
+function renderFlow(){
+  var html = '<div class="flow">';
+  FLOW.forEach(function(s, i){
+    html += '<div class="step" data-step="'+i+'"><div class="step-in">'+
+      '<div class="step-t"><span class="pill">'+s.stage+'</span>'+s.title+'</div>'+
+      '<div class="step-d">'+s.detail.replace(/<[^>]+>/g,'').slice(0,86)+'…</div>'+
+      '<div class="step-io"><span><b>入</b> <span class="dt">'+s.input+'</span></span>'+
+        '<span><b>出</b> <span class="dt">'+s.output+'</span></span></div>'+
+      '</div></div>';
+  });
+  html += '</div>';
+  return '<section class="card" id="dataflow">'+
+    '<div class="card-h"><h2><span class="num">03</span>数据流向：从命令行到 HTML</h2></div>'+
+    '<div class="card-sub">七步走完全程。每一步都标注了真实的数据结构与负责模块——点击看代码。</div>'+
+    '<div class="card-b">'+html+'</div></section>';
+}
+
+/* ============================================================
+   视图 4：设计决策
+   ============================================================ */
+function renderDecisions(){
+  var html = DECISIONS.map(function(d, i){
+    return '<div class="dec" data-dec="'+i+'">'+
+      '<div class="dec-t"><span class="idx">'+d.idx+'</span><span>'+d.title+'</span></div>'+
+      '<div class="dec-x">'+d.decision.replace(/<[^>]+>/g,'').slice(0,74)+'…</div>'+
+      '<div style="margin-top:8px"><span class="badge" style="color:var(--green);background:var(--green-l)">'+
+        d.plus.length+' 项收益</span><span class="badge" style="color:var(--red);background:var(--red-l)">'+
+        d.minus.length+' 项代价</span></div>'+
+      '</div>';
+  }).join('');
+  return '<section class="card" id="decisions">'+
+    '<div class="card-h"><h2><span class="num">04</span>关键设计决策与取舍</h2></div>'+
+    '<div class="card-sub">架构不是"好不好"，而是"换了什么"。每条都列出收益、代价，以及真实工程里的常见做法。</div>'+
+    '<div class="card-b">'+html+'</div></section>';
+}
+
+/* ============================================================
+   视图 5：知识清单
+   ============================================================ */
+var curPrio = 'all';
+var doneSet = {};
+try { doneSet = JSON.parse(localStorage.getItem('fl_done')||'{}'); } catch(e){ doneSet = {}; }
+
+function saveDone(){ try{ localStorage.setItem('fl_done', JSON.stringify(doneSet)); }catch(e){} }
+
+function renderKnowledge(){
+  var total=0, done=0;
+  THEMES.forEach(function(t){ t.items.forEach(function(it){ total++; if(doneSet[it.id]) done++; }); });
+
+  var html = '<div class="filters" id="kfilters">'+
+    '<button class="fbtn on" data-prio="all">全部</button>'+
+    '<button class="fbtn" data-prio="P0">P0 必学</button>'+
+    '<button class="fbtn" data-prio="P1">P1 进阶</button>'+
+    '<button class="fbtn" data-prio="P2">P2 加分</button>'+
+    '<span class="progress">已掌握 '+done+' / '+total+'</span>'+
+    '</div>'+
+    '<div class="pbar"><i style="width:'+(total? Math.round(done/total*100):0)+'%"></i></div>';
+
+  THEMES.forEach(function(t){
+    var items = t.items.filter(function(it){ return curPrio==='all' || it.prio===curPrio; });
+    if (!items.length) return;
+    var dn = t.items.filter(function(it){ return doneSet[it.id]; }).length;
+    html += '<div class="theme" data-theme="'+t.key+'">'+
+      '<div class="theme-h"><span class="dot" style="background:'+t.color+'"></span>'+
+        '<h3>'+t.key+'. '+t.name+'</h3>'+
+        '<span style="font-size:12px;color:var(--ink3)">'+t.desc+'</span>'+
+        '<span class="tc">'+dn+'/'+t.items.length+'</span></div>'+
+      '<div class="kl">'+
+        items.map(function(it){
+          return '<div class="kitem'+(doneSet[it.id]?' done':'')+'" data-k="'+it.id+'">'+
+            '<span class="ktick" data-tick="'+it.id+'" role="checkbox" aria-checked="'+(!!doneSet[it.id])+'" title="标记已掌握">✓</span>'+
+            '<span class="kbody"><span class="kt">'+it.name+'</span>'+
+              '<span class="kw">'+it.why.slice(0,42)+'…</span></span>'+
+            '<span class="prio '+prioClass(it.prio)+'">'+it.prio+'</span></div>';
+        }).join('')+
+      '</div></div>';
+  });
+
+  return '<section class="card" id="knowledge">'+
+    '<div class="card-h"><h2><span class="num">05</span>知识清单</h2></div>'+
+    '<div class="card-sub">按主题分类，每条标注优先级（P0 必学 / P1 进阶 / P2 加分）。点击看"为什么学"和"在本项目里怎么练"；点左侧方框可标记已掌握（存在本地）。</div>'+
+    '<div class="card-b">'+html+'</div></section>';
+}
+
+/* ---------- 学习路径 ---------- */
+function renderPath(){
+  var html = STAGES.map(function(s){
+    return '<div class="stage"><div class="stage-n">'+s.n+'</div>'+
+      '<div class="stage-b"><h4>'+s.title+'</h4>'+
+        '<p style="color:var(--ink3);font-size:12px">'+s.sub+'</p>'+
+        '<p>'+s.desc+'</p>'+
+        '<div class="tags">'+s.tags.map(function(x){ return '<span>'+x+'</span>'; }).join('')+'</div>'+
+      '</div></div>';
+  }).join('');
+  return '<section class="card" id="path">'+
+    '<div class="card-h"><h2><span class="num">06</span>学习路径</h2></div>'+
+    '<div class="card-sub">五站式路线：从"读懂因子"到"接真实数据"。每一站都对应知识清单里的编号，按顺序走最省力。</div>'+
+    '<div class="card-b"><div class="path">'+html+'</div></div></section>';
+}
+
+/* ============================================================
+   渲染与事件
+   ============================================================ */
+var SECTIONS = [
+  { id:'overview',  label:'架构总览' },
+  { id:'modules',   label:'模块关系' },
+  { id:'dataflow',  label:'数据流' },
+  { id:'decisions', label:'设计决策' },
+  { id:'knowledge', label:'知识清单' },
+  { id:'path',      label:'学习路径' }
+];
+
+function render(){
+  $('#tabs').innerHTML = SECTIONS.map(function(s, i){
+    return '<button class="tab'+(i===0?' on':'')+'" data-go="'+s.id+'">'+s.label+'</button>';
+  }).join('');
+
+  $('#main').innerHTML =
+    renderOverview() + renderGraph() + renderFlow() +
+    renderDecisions() + renderKnowledge() + renderPath();
+
+  bind();
+}
+
+function bind(){
+  /* 标签页滚动 */
+  document.querySelectorAll('.tab').forEach(function(b){
+    b.addEventListener('click', function(){
+      var el = document.getElementById(b.dataset.go);
+      if (el) window.scrollTo({ top: el.offsetTop - 52, behavior:'smooth' });
+    });
+  });
+
+  /* 模块（分层卡片） */
+  document.querySelectorAll('.node[data-mod]').forEach(function(b){
+    var id = b.dataset.mod;
+    b.addEventListener('click', function(){ clearSel(); b.classList.add('sel'); showModule(id); });
+    b.addEventListener('mouseenter', function(){ showModule(id); });
+  });
+
+  /* 模块（SVG 图） */
+  var gnodes = document.querySelectorAll('.gnode');
+  var gedges = document.querySelectorAll('.gedge');
+  function highlight(id){
+    var keep = {};
+    keep[id] = 1;
+    gedges.forEach(function(e){
+      var on = (e.dataset.from===id || e.dataset.to===id);
+      e.classList.toggle('hl', on);
+      e.classList.toggle('dim', !on);
+      if (on){ keep[e.dataset.from]=1; keep[e.dataset.to]=1; }
+    });
+    gnodes.forEach(function(n){ n.classList.toggle('dim', !keep[n.dataset.mod]); });
+  }
+  function unhighlight(){
+    gedges.forEach(function(e){ e.classList.remove('hl','dim'); });
+    gnodes.forEach(function(n){ n.classList.remove('dim'); });
+  }
+  gnodes.forEach(function(n){
+    var id = n.dataset.mod;
+    n.addEventListener('mouseenter', function(){ highlight(id); showModule(id); });
+    n.addEventListener('mouseleave', unhighlight);
+    n.addEventListener('click', function(){ clearSel(); n.classList.add('sel'); showModule(id); });
+    n.addEventListener('focus', function(){ highlight(id); });
+    n.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); showModule(id); } });
+  });
+
+  /* 数据流 */
+  document.querySelectorAll('.step').forEach(function(s){
+    s.addEventListener('click', function(){ clearSel(); s.classList.add('sel'); showStep(+s.dataset.step); });
+    s.addEventListener('mouseenter', function(){ showStep(+s.dataset.step); });
+  });
+
+  /* 决策 */
+  document.querySelectorAll('.dec').forEach(function(d){
+    d.addEventListener('click', function(){ clearSel(); d.classList.add('sel'); showDecision(+d.dataset.dec); });
+    d.addEventListener('mouseenter', function(){ showDecision(+d.dataset.dec); });
+  });
+
+  /* 知识清单 */
+  document.querySelectorAll('#kfilters .fbtn').forEach(function(b){
+    b.addEventListener('click', function(){
+      curPrio = b.dataset.prio;
+      var box = document.getElementById('knowledge');
+      box.outerHTML = renderKnowledge();
+      bindKnowledge();
+    });
+  });
+  bindKnowledge();
+
+  /* 滚动高亮当前区块 */
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (en.isIntersecting){
+        document.querySelectorAll('.tab').forEach(function(t){
+          t.classList.toggle('on', t.dataset.go === en.target.id);
+        });
+      }
+    });
+  }, { rootMargin:'-56px 0px -70% 0px' });
+  SECTIONS.forEach(function(s){ var el=document.getElementById(s.id); if(el) obs.observe(el); });
+}
+
+function bindKnowledge(){
+  document.querySelectorAll('.kitem').forEach(function(k){
+    var id = k.dataset.k;
+    k.addEventListener('click', function(ev){
+      if (ev.target.dataset.tick) return;      /* 点勾选框不打开详情 */
+      var item = null;
+      THEMES.forEach(function(t){ t.items.forEach(function(x){ if(x.id===id) item=x; }); });
+      clearSel(); k.classList.add('sel'); showK(item);
+    });
+    k.addEventListener('mouseenter', function(){
+      var item = null;
+      THEMES.forEach(function(t){ t.items.forEach(function(x){ if(x.id===id) item=x; }); });
+      showK(item);
+    });
+  });
+  document.querySelectorAll('.ktick').forEach(function(tk){
+    tk.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      var id = tk.dataset.tick;
+      doneSet[id] = !doneSet[id];
+      saveDone();
+      var box = document.getElementById('knowledge');
+      box.outerHTML = renderKnowledge();
+      bindKnowledge();
+    });
+  });
+}
+
+render();
+</script>
+</body>
+</html>
