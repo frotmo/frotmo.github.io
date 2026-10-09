@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>xv6 手册 · MIT 6.1810 可视化导学</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="index.html"><span class="mark">OS</span><span>MIT 6.1810 导学<small>零基础可视化学习站</small></span></a>
+    <nav class="navlinks">
+      <a class="back" href="../../index.html">← 学习笔记</a>
+      <a href="index.html">首页</a><a href="papers.html">论文精讲</a><a href="labs.html">Lab 拆解</a>
+      <a href="notes.html">Notes 可视化</a><a href="xv6.html">xv6 手册</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  <div class="layout">
+    <aside class="toc" id="toc"></aside>
+    <div>
+      <div class="pagehead">
+        <span class="eyebrow">Part 4 · xv6</span>
+        <h1>xv6：一个「教科书式」的 Unix 内核，以及它和 x86 的差别</h1>
+        <p class="lede">
+          xv6 是 Dennis Ritchie 与 Ken Thompson 的 Unix v6 的 RISC-V 重实现，代码量约一万行，
+          刻意保持「能一口气读完」。这一部分做三件事：
+          <b>①</b> 按 lab 给出 xv6 book 的必读章节与源码地图；
+          <b>②</b> 指出每个 lab 真正依赖的 xv6 设计基础（哪些函数、哪些结构必须先看懂）；
+          <b>③</b> 把 RISC-V 版 xv6 与传统的 80x86 教学内核（JOS / xv6-x86）逐项对比，
+          分析两种 ISA 在<b>特权级、页表、陷阱、I/O、原子操作</b>上的设计异同、各自优缺点与设计独特之处。
+        </p>
+        <div class="note" style="margin-top:16px"><span class="nt">为什么要对比 x86</span>
+          很多中文教材、网上的 xv6/JOS 笔记仍是 x86 版。理解两套机制的映射关系，
+          你就能把已有知识平移过来，而不必从零重学 —— 同时也能看清
+          <b>「哪些是 OS 的普适思想，哪些只是某个 ISA 的历史包袱」</b>。
+        </div>
+      </div>
+      <div id="content"></div>
+    </div>
+  </div>
+</main>
+<footer><div class="fin"><span>MIT 6.1810 可视化导学 · xv6 部分</span><span><a href="https://mit-pdos.github.io/xv6-riscv-book/" target="_blank" rel="noopener">xv6 book</a> · <a href="https://github.com/mit-pdos/xv6-riscv" target="_blank" rel="noopener">源码</a></span></div></footer>
+<a class="totop" id="totop" href="#">↑</a>
+<script src="assets/viz.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/data-xv6.js"></script>
+<script>Site.render(XV6_DATA);</script>
+</body>
+</html>

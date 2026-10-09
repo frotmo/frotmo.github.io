@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Notes 可视化 · MIT 6.1810 可视化导学</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="index.html"><span class="mark">OS</span><span>MIT 6.1810 导学<small>零基础可视化学习站</small></span></a>
+    <nav class="navlinks">
+      <a class="back" href="../../index.html">← 学习笔记</a>
+      <a href="index.html">首页</a><a href="papers.html">论文精讲</a><a href="labs.html">Lab 拆解</a>
+      <a href="notes.html">Notes 可视化</a><a href="xv6.html">xv6 手册</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  <div class="layout">
+    <aside class="toc" id="toc"></aside>
+    <div>
+      <div class="pagehead">
+        <span class="eyebrow">Part 3 · Notes</span>
+        <h1>22 讲讲义的核心概念，画出来讲清楚</h1>
+        <p class="lede">
+          课程讲义是课堂速记：大量「<code>see vm.c</code>」「<code>[diagram]</code>」「<code>why?</code>」。
+          这一部分把速记里省略掉的部分补成完整叙述，用图呈现机制本身，
+          并<b>单独标出每个机制的典型 corner case</b> —— 那些「看起来对、实际上会在某个时序下炸掉」的地方。
+          每个知识点控制在几分钟能读完的长度。
+        </p>
+        <div class="note purple" style="margin-top:16px"><span class="nt">corner case 为什么重要</span>
+          OS 里绝大多数 bug 不出现在「正常路径」，而出现在<b>时序、异常、边界</b>的交叉点：
+          丢失的唤醒、TLB 没刷、检查与使用之间的时间窗、中断嵌套、崩溃时刻。
+          这些正是面试与真实事故的高发区。
+        </div>
+      </div>
+      <div id="content"></div>
+    </div>
+  </div>
+</main>
+<footer><div class="fin"><span>MIT 6.1810 可视化导学 · Notes 部分</span><span><a href="https://pdos.csail.mit.edu/6.1810/2026/lec/" target="_blank" rel="noopener">官方讲义</a></span></div></footer>
+<a class="totop" id="totop" href="#">↑</a>
+<script src="assets/viz.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/data-notes.js"></script>
+<script>Site.render(NOTES_DATA);</script>
+</body>
+</html>

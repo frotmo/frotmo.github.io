@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MIT 6.1810 操作系统可视化导学 · 零基础友好</title>
+<meta name="description" content="面向零基础初学者的 MIT 6.1810（原 6.828）操作系统课程可视化学习站：论文精讲、Lab 原理拆解、Notes 可视化、xv6 与 x86 对比。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="index.html">
+      <span class="mark">OS</span>
+      <span>MIT 6.1810 导学<small>零基础可视化学习站</small></span>
+    </a>
+    <nav class="navlinks">
+      <a class="back" href="../../index.html">← 学习笔记</a>
+      <a href="index.html">首页</a>
+      <a href="papers.html">论文精讲</a>
+      <a href="labs.html">Lab 拆解</a>
+      <a href="notes.html">Notes 可视化</a>
+      <a href="xv6.html">xv6 手册</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="hero">
+    <h1>操作系统不用「悟」，<br>它只是一堆<em>被反复权衡过的设计决定</em></h1>
+    <p class="lede">
+      MIT 6.1810（原 6.828）被公认为最好的操作系统入门课，但它的阅读清单和实验文档对新手极不友好：
+      论文默认你懂内核架构，lab 手册只告诉你「改哪个函数」，讲义 notes 是课堂速记。
+      这个站点把<strong>课程论文、9 个 lab、22 讲 notes 与 xv6 手册</strong>重新组织成一条
+      <strong>零基础可走完的路径</strong>，并尽可能把抽象机制画成图。
+    </p>
+    <div class="hero-cta">
+      <a class="btn" href="#roadmap">从学习路线开始 →</a>
+      <a class="btn ghost" href="papers.html">直接看论文精讲</a>
+    </div>
+  </section>
+
+  <!-- 四大板块 -->
+  <div class="pillars">
+    <a class="pillar" href="papers.html">
+      <div class="ico" style="background:var(--accent-soft);color:var(--accent)">📄</div>
+      <h3>论文精讲</h3>
+      <p>10 篇必读论文。每篇讲清「它想解决什么、它怎么解决、它和别的方案差在哪」，并对 Janus、L4、RCU、gVisor/Firecracker、BPF、Superpages、Appel&amp;Li 等特色论文做深入剖析。</p>
+    </a>
+    <a class="pillar" href="labs.html">
+      <div class="ico" style="background:var(--accent-2-soft);color:var(--accent-2)">🛠</div>
+      <h3>Lab 拆解</h3>
+      <p>9 个实验。先讲「要完成这个 lab 你必须懂哪些 OS 原理与架构范式」，再补上官方手册省略掉的动机，并引用对应论文原文说明。</p>
+    </a>
+    <a class="pillar" href="notes.html">
+      <div class="ico" style="background:var(--teal-soft);color:var(--teal)">🗺</div>
+      <h3>Notes 可视化</h3>
+      <p>把讲义里晦涩的速记展开成图 + 白话解释，并单独标出每个机制最容易踩的 corner case（丢失唤醒、TLB、TOCTOU、活锁…）。</p>
+    </a>
+    <a class="pillar" href="xv6.html">
+      <div class="ico" style="background:var(--amber-soft);color:var(--amber)">📘</div>
+      <h3>xv6 手册</h3>
+      <p>按 lab 组织 xv6 必读章节与源码地图，并逐项对比 RISC-V 与 80x86 在特权级、页表、中断、I/O 上的设计异同与优劣。</p>
+    </a>
+  </div>
+
+  <!-- 操作系统到底在干什么 -->
+  <div class="card" style="margin-top:26px">
+    <div class="card-hd"><h3>先建立一个心智模型：操作系统到底在干什么？</h3>
+      <p class="sub">在看任何一篇论文之前，先把这张图记住。后面所有内容都是这张图某一格的展开。</p>
+    </div>
+    <div class="card-bd">
+      <div class="viz" id="v-oslayers"></div>
+      <p>操作系统同时在做三件互相拉扯的事，几乎所有「设计取舍」都来自这三者之间的张力：</p>
+      <div class="vs">
+        <div class="a"><h5>① 抽象（Abstraction）</h5>
+          <p>把 messy 的硬件包装成好用的概念：</p>
+          <ul><li>CPU → <b>进程 / 线程</b></li><li>内存 → <b>虚拟地址空间</b></li><li>磁盘 → <b>文件与目录</b></li><li>网卡 → <b>socket</b></li></ul>
+        </div>
+        <div class="b"><h5>② 复用（Multiplexing）</h5>
+          <p>多个程序同时用一份硬件，且互不察觉：</p>
+          <ul><li>时间复用：调度、上下文切换</li><li>空间复用：页表、内存分配</li><li>竞争：锁、原子操作</li></ul>
+        </div>
+      </div>
+      <div class="vs">
+        <div class="a"><h5>③ 隔离（Isolation）</h5>
+          <p>一个程序出错/作恶不能影响别人：</p>
+          <ul><li>地址空间隔离（页表）</li><li>特权级隔离（U / S mode）</li><li>系统调用是唯一入口</li></ul>
+        </div>
+        <div class="b"><h5>⚖️ 由此产生的永恒张力</h5>
+          <ul>
+            <li>抽象越<b>强</b> → 越方便，但越<b>慢</b>（见微内核论文）</li>
+            <li>隔离越<b>强</b> → 越安全，但开销越<b>大</b>（见 Firecracker / gVisor 论文）</li>
+            <li>共享越<b>多</b> → 越快，但越容易<b>竞争</b>（见 lock lab / RCU 论文）</li>
+            <li>硬件越<b>激进优化</b> → 越快，但可能<b>泄漏</b>（见 Meltdown 论文）</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note purple"><span class="nt">给零基础读者的一句话</span>
+        学操作系统不是背概念，而是反复问：<b>这个机制如果不做会怎样？做了又要付出什么代价？</b>
+        本站在每一节都会同时给出这两半。
+      </div>
+    </div>
+  </div>
+
+  <!-- 学习路线图 -->
+  <div class="card" id="roadmap">
+    <div class="card-hd"><h3>学习路线图（建议按这个顺序走）</h3>
+      <p class="sub">这条路径把「先有感性认识 → 再进内核 → 再做并发 → 最后做存储与高级特性」串起来，每一站都标注了对应读什么。</p>
+    </div>
+    <div class="card-bd">
+      <div class="road">
+
+        <div class="rnode">
+          <div class="rmeta">阶段 0 · 准备（1–2 天）</div>
+          <h4>补三样东西：C 语言指针、RISC-V 汇编、gdb</h4>
+          <p>课程不教这些，但它们是门槛。你只需要能读懂指针、结构体、函数调用栈，以及能在 gdb 里打断点看寄存器。</p>
+          <div class="chips">
+            <span class="chip on">K&amp;R 第 5–6 章</span>
+            <span class="chip on">xv6 book Ch.1</span>
+            <span class="chip on">ecall / sret / satp 是什么</span>
+            <a class="chip" href="labs.html#lab-util">→ Lab: util</a>
+          </div>
+        </div>
+
+        <div class="rnode">
+          <div class="rmeta">阶段 1 · 用户视角（第 1–2 周）</div>
+          <h4>先当「使用者」：系统调用就是操作系统的 API</h4>
+          <p>在 <code>util</code> lab 里写 sleep / find / memdump，你会第一次意识到：<b>程序能做的事，完全由内核提供的那几十个系统调用决定</b>。
+             接着 <code>syscall</code> lab 让你亲手加一个系统调用，看清这层边界是怎么实现的。</p>
+          <div class="chips">
+            <a class="chip" href="labs.html#lab-util">Lab: util</a>
+            <a class="chip" href="labs.html#lab-syscall">Lab: syscall</a>
+            <a class="chip" href="papers.html#p-janus">论文: Janus（系统调用拦截）</a>
+            <a class="chip" href="notes.html#n-syscall">Notes: 系统调用与 trap</a>
+            <a class="chip" href="xv6.html#x-ch2">xv6 Ch.2 / Ch.4</a>
+          </div>
+        </div>
+
+        <div class="rnode">
+          <div class="rmeta">阶段 2 · 进内核：地址空间与陷阱（第 3–6 周）</div>
+          <h4>本课程最硬的一段：页表、trap、页错误</h4>
+          <p><code>pgtbl</code> 让你把页表打印出来看；<code>traps</code> 让你理解用户态/内核态怎么切换；
+             <code>cow</code> 让你第一次用「页错误」当编程工具。这三关过了，后面就是应用。</p>
+          <div class="chips">
+            <a class="chip" href="labs.html#lab-pgtbl">Lab: pgtbl</a>
+            <a class="chip" href="labs.html#lab-traps">Lab: traps</a>
+            <a class="chip" href="labs.html#lab-cow">Lab: cow</a>
+            <a class="chip" href="papers.html#p-superpages">论文: Superpages</a>
+            <a class="chip" href="papers.html#p-uvm">论文: Appel &amp; Li</a>
+            <a class="chip" href="notes.html#n-pagetable">Notes: 页表</a>
+            <a class="chip" href="notes.html#n-pagefault">Notes: 页错误</a>
+          </div>
+        </div>
+
+        <div class="rnode">
+          <div class="rmeta">阶段 3 · 并发与设备（第 7–10 周）</div>
+          <h4>多核时代真正的难点：竞争、锁、中断</h4>
+          <p><code>lock</code> lab 让你量化锁竞争并重构数据结构；<code>net</code> lab 让你写真正的 DMA 环形描述符驱动。
+             配合 Read-copy-update 与 receive livelock 两篇论文，你会理解「性能问题往往不是算法问题，而是结构问题」。</p>
+          <div class="chips">
+            <a class="chip" href="labs.html#lab-lock">Lab: lock</a>
+            <a class="chip" href="labs.html#lab-net">Lab: net</a>
+            <a class="chip" href="papers.html#p-rcu">论文: RCU</a>
+            <a class="chip" href="papers.html#p-livelock">论文: Receive Livelock</a>
+            <a class="chip" href="papers.html#p-latency">论文: 尾延迟 / Shenango</a>
+            <a class="chip" href="notes.html#n-lock">Notes: 锁</a>
+            <a class="chip" href="notes.html#n-driver">Notes: 中断与驱动</a>
+          </div>
+        </div>
+
+        <div class="rnode">
+          <div class="rmeta">阶段 4 · 存储、隔离与前沿（第 11–14 周）</div>
+          <h4>崩溃一致性、用户态内存管理、隔离技术全景</h4>
+          <p><code>fs</code> 让你改 inode 结构并处理崩溃恢复；<code>mmap</code> 让你把「用户态页错误处理」这套思想落地。
+             最后的论文把视野拉到现代：容器、微 VM、eBPF、侧信道。</p>
+          <div class="chips">
+            <a class="chip" href="labs.html#lab-fs">Lab: fs</a>
+            <a class="chip" href="labs.html#lab-mmap">Lab: mmap</a>
+            <a class="chip" href="papers.html#p-microkernel">论文: L4 微内核</a>
+            <a class="chip" href="papers.html#p-blending">论文: Firecracker / gVisor</a>
+            <a class="chip" href="papers.html#p-bpf">论文: BPF</a>
+            <a class="chip" href="papers.html#p-meltdown">论文: Meltdown</a>
+            <a class="chip" href="notes.html#n-fs">Notes: 文件系统</a>
+            <a class="chip" href="notes.html#n-isolation">Notes: 隔离</a>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="note warn"><span class="nt">关于顺序的重要提醒</span>
+        <b>不要先读论文再写代码，也不要只写代码不读论文。</b>
+        建议节奏：先看本站对应 lab 的「必备原理」→ 动手做 lab → 卡住时回来读论文与 notes。
+        论文里的设计动机，只有当你亲手被同一个问题卡住过才会真正理解。
+      </div>
+    </div>
+  </div>
+
+  <!-- 术语表 -->
+  <div class="card">
+    <div class="card-hd"><h3>零基础术语速查（遇到就回来查）</h3></div>
+    <div class="card-bd">
+      <dl class="gloss">
+        <div class="gitem"><dt>内核态 / 用户态</dt><dd>CPU 的两种特权级别。内核态能执行特权指令、访问全部内存；用户态不行。RISC-V 里叫 S mode / U mode。</dd></div>
+        <div class="gitem"><dt>trap（陷阱）</dt><dd>任何「从用户态跳进内核」的事件统称：系统调用（ecall）、中断（设备）、异常（页错误、非法指令）。</dd></div>
+        <div class="gitem"><dt>页表（page table）</dt><dd>一张由内核维护、由硬件查的「虚拟地址 → 物理地址」翻译表。它是进程隔离的物理基础。</dd></div>
+        <div class="gitem"><dt>PTE</dt><dd>页表项。除了物理页号，还带 V/R/W/X/U/A/D 等权限与状态位。</dd></div>
+        <div class="gitem"><dt>TLB</dt><dd>页表的缓存。页表改了必须同步失效它（<code>sfence.vma</code>），这是新手最容易漏的一步。</dd></div>
+        <div class="gitem"><dt>页错误（page fault）</dt><dd>访问了未映射或无权限的地址。它不只是「出错」，更是现代 OS 实现懒加载 / COW / mmap 的核心手段。</dd></div>
+        <div class="gitem"><dt>上下文切换</dt><dd>保存当前线程的寄存器、恢复另一个线程的寄存器。xv6 里由 <code>swtch()</code> 完成。</dd></div>
+        <div class="gitem"><dt>自旋锁（spinlock）</dt><dd>拿不到锁就一直循环重试。临界区短、且不能在持有它的情况下睡眠时使用。</dd></div>
+        <div class="gitem"><dt>竞争（race）</dt><dd>两个执行流同时访问同一份数据、且至少一个是写，结果依赖时序。死锁、丢失唤醒都属于它的变体。</dd></div>
+        <div class="gitem"><dt>DMA</dt><dd>设备不经过 CPU，直接把数据搬到内存。驱动要提供「描述符环」告诉设备往哪搬。</dd></div>
+        <div class="gitem"><dt>inode</dt><dd>文件的「元数据 + 数据块位置」记录。目录只是「名字 → inode 号」的表。</dd></div>
+        <div class="gitem"><dt>WAL / 日志</dt><dd>先把改动写进日志区、commit 之后再落原位，保证崩溃后能重放，从而维持文件系统一致性。</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h3>这个站点的内容从哪来</h3></div>
+    <div class="card-bd">
+      <p>全部内容基于 MIT 6.1810 Fall 2026 官方公开材料整理与重写：</p>
+      <ul>
+        <li><a href="https://pdos.csail.mit.edu/6.1810/2026/schedule.html" target="_blank" rel="noopener">课程 Schedule</a>：22 讲主题、10 篇 preparation 论文、9 个 lab 的时间安排</li>
+        <li><a href="https://pdos.csail.mit.edu/6.1810/2026/labs/" target="_blank" rel="noopener">Lab 官方文档</a>：util / syscall / pgtbl / traps / cow / lock / net / fs / mmap</li>
+        <li><a href="https://pdos.csail.mit.edu/6.1810/2026/lec/" target="_blank" rel="noopener">Lecture notes</a>：22 讲课堂讲义</li>
+        <li><a href="https://mit-pdos.github.io/xv6-riscv-book/" target="_blank" rel="noopener">xv6 book</a>（RISC-V 版）与 <a href="https://github.com/mit-pdos/xv6-riscv" target="_blank" rel="noopener">xv6-riscv 源码</a></li>
+      </ul>
+      <div class="note"><span class="nt">使用建议</span>
+        本站是<strong>导学与补充材料</strong>，不能替代动手做 lab，也不能替代读原论文。
+        建议把它当作「读原文之前的热身」和「卡住时的第二本说明书」。
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div class="fin">
+    <span>MIT 6.1810 操作系统可视化导学 · 基于 2026 Fall 公开课程材料整理</span>
+    <span><a href="https://pdos.csail.mit.edu/6.1810/2026/schedule.html" target="_blank" rel="noopener">官方课程页</a> · <a href="https://github.com/mit-pdos/xv6-riscv" target="_blank" rel="noopener">xv6-riscv</a></span>
+  </div>
+</footer>
+
+<a class="totop" id="totop" href="#">↑</a>
+
+<script src="assets/viz.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  var el = document.getElementById('v-oslayers');
+  if (el && window.VIZ && VIZ.oslayers) el.innerHTML = VIZ.oslayers();
+  var btn = document.getElementById('totop');
+  if (btn) {
+    btn.addEventListener('click', function(e){ e.preventDefault(); window.scrollTo({top:0,behavior:'smooth'}); });
+    window.addEventListener('scroll', function(){
+      btn.classList.toggle('show', window.scrollY > 400);
+    }, {passive:true});
+  }
+})();
+</script>
+</body>
+</html>

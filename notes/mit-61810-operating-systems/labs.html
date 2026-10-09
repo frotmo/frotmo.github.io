@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lab 拆解 · MIT 6.1810 可视化导学</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="index.html"><span class="mark">OS</span><span>MIT 6.1810 导学<small>零基础可视化学习站</small></span></a>
+    <nav class="navlinks">
+      <a class="back" href="../../index.html">← 学习笔记</a>
+      <a href="index.html">首页</a><a href="papers.html">论文精讲</a><a href="labs.html">Lab 拆解</a>
+      <a href="notes.html">Notes 可视化</a><a href="xv6.html">xv6 手册</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  <div class="layout">
+    <aside class="toc" id="toc"></aside>
+    <div>
+      <div class="pagehead">
+        <span class="eyebrow">Part 2 · Lab</span>
+        <h1>9 个 Lab：先懂设计范式，再动手改代码</h1>
+        <p class="lede">
+          官方 lab 手册的典型问题是：<b>它只告诉你「改 uvmcopy()」「加一个 sys_pgaccess()」</b>，
+          却不解释为什么这样设计、这个 lab 在整个 OS 图景里站在哪、以及手册里一笔带过的那些前提是什么。
+          这一部分的组织方式：<b>必备原理 → 设计目的 → 任务拆解 → 文档补充（引用原论文 / xv6 book 原文）</b>，
+          并单独列出每个 lab 最容易踩的坑。
+        </p>
+        <div class="note warn" style="margin-top:16px"><span class="nt">阅读顺序建议</span>
+          每个 lab 都先读「<b>① 必备原理</b>」再读任务。如果某个原理看不懂，去
+          <a href="notes.html">Notes 可视化</a> 找对应知识点 —— 那里有图。
+        </div>
+      </div>
+      <div id="content"></div>
+    </div>
+  </div>
+</main>
+<footer><div class="fin"><span>MIT 6.1810 可视化导学 · Lab 部分</span><span><a href="https://pdos.csail.mit.edu/6.1810/2026/labs/" target="_blank" rel="noopener">官方 Lab 页</a></span></div></footer>
+<a class="totop" id="totop" href="#">↑</a>
+<script src="assets/viz.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/data-labs.js"></script>
+<script>Site.render(LABS_DATA);</script>
+</body>
+</html>

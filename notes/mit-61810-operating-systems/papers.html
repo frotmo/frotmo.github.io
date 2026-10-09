@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>论文精讲 · MIT 6.1810 可视化导学</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="index.html"><span class="mark">OS</span><span>MIT 6.1810 导学<small>零基础可视化学习站</small></span></a>
+    <nav class="navlinks">
+      <a class="back" href="../../index.html">← 学习笔记</a>
+      <a href="index.html">首页</a><a href="papers.html">论文精讲</a><a href="labs.html">Lab 拆解</a>
+      <a href="notes.html">Notes 可视化</a><a href="xv6.html">xv6 手册</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  <div class="layout">
+    <aside class="toc" id="toc"></aside>
+    <div>
+      <div class="pagehead">
+        <span class="eyebrow">Part 1 · 论文</span>
+        <h1>10 篇论文：每一篇都在回答同一个问题——<br>「这个设计，代价是什么？」</h1>
+        <p class="lede">
+          课程的 10 篇 preparation 论文并不是「相关阅读」，它们各自是一个<b>真实存在过的工程难题</b>的解法。
+          这一部分的组织方式：<b>先讲清动机</b>（没有它会怎样）→ <b>再讲核心设计</b>（配图）→
+          <b>然后和相邻方案对比</b>（关键差异）→ 最后对架构/逻辑上特别有特色的论文做<b>深入剖析</b>，
+          并说明它和你正在写的 xv6 lab 有什么关系。
+        </p>
+        <div class="note" style="margin-top:16px"><span class="nt">怎么读</span>
+          每篇都给了「一句话主张」和「如果只看一张图」。赶时间可以只看这两处 + 深入剖析；
+          想真正吃透就顺着「与 xv6 的联系」去对应 lab 里动手。
+        </div>
+      </div>
+      <div id="content"></div>
+    </div>
+  </div>
+</main>
+<footer><div class="fin"><span>MIT 6.1810 可视化导学 · 论文部分</span><span><a href="https://pdos.csail.mit.edu/6.1810/2026/schedule.html" target="_blank" rel="noopener">官方课程页</a></span></div></footer>
+<a class="totop" id="totop" href="#">↑</a>
+<script src="assets/viz.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/data-papers.js"></script>
+<script>Site.render(PAPERS_DATA);</script>
+</body>
+</html>
