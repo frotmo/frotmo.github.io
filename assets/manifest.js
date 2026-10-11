@@ -38,7 +38,7 @@ window.SITE_MANIFEST = {
            '架构、取舍和踩过的坑讲明白。每篇都力求做到：能看懂、能验证、能照着复现。',
     author: 'frotmo',
     repo: 'https://github.com/frotmo/frotmo.github.io',
-    updated: '2026-10-09'
+    updated: '2026-10-11'
   },
 
   /* ── 分类（决定筛选按钮与卡片配色） ─────────────────── */
@@ -246,16 +246,52 @@ window.SITE_MANIFEST = {
         '共享越多越容易竞争（kalloc 的单条空闲链表）、硬件优化越激进越可能破坏自己的抽象（乱序执行泄漏特权数据）。' +
         '另一条是「按需」：lazy allocation、COW、mmap 懒加载、RCU 延迟释放，本质都是同一条判据 —— ' +
         '不靠预测，靠观测到的证据。'
+    },
+
+    {
+      slug: 'rlhf-mini-pipeline-architecture',
+      title: 'RLHF mini pipeline 架构与核心设计',
+      subtitle: '教学级 RLHF 实现：19 个模块的职责、依赖与取舍，以及三种真实踩到的 reward hacking',
+      category: 'llm',
+      path: 'notes/rlhf-mini-pipeline-architecture/',
+      date: '2026-10-11',
+      readingTime: '约 40 分钟',
+      tags: ['RLHF', 'PPO', 'REINFORCE', 'GAE', 'KL 约束', '奖励归一化', 'KV Cache',
+             'mini-GPT', 'PyTorch', '软件架构', '依赖倒置', 'reward hacking'],
+      summary:
+        '一个面向入门学习者的、教学级的 RLHF 最小可运行实现 —— 从偏好数据到 PPO 对齐，' +
+        '全部用纯 PyTorch 从零写起，无需 GPU 即可跑通。这篇把它<b>怎么被搭起来</b>讲透：' +
+        '五层单向依赖、19 个模块的职责边界与 43 条真实依赖边、PPO 两阶段的数据流与显存账、' +
+        '九条设计决策的「为什么」与「代价」，外加拓展手册、开发历程与后续展望。',
+      /* 首屏大数字，最多 4 个效果最好 */
+      metrics: [
+        { val: '5',    unit: '层', key: '单向依赖分层' },
+        { val: '19',   unit: '个', key: '代码模块' },
+        { val: '59',   unit: '条', key: '知识清单' },
+        { val: '95.8', unit: '%',  key: '任务级正向词率', good: true }
+      ],
+      /* 这篇笔记里有什么，用于卡片上的要点列表 */
+      sections: [
+        '五层架构总览：基础层 → 数据层 → 模型层 → 算法层 → 编排层，依赖严格向下、无环',
+        '19 个模块的职责、对外接口与依赖关系，附可悬停高亮的 19×19 依赖矩阵（43 条依赖边）',
+        '张量级数据流：SFT → 奖励模型 → PPO 三段流水线，逐步骤标注张量形状与显存开销',
+        '九条关键设计决策，每条成对给出「为什么这么做」与「付出了什么代价」',
+        '59 条知识清单（七个主题、P0/P1/P2 优先级），支持筛选、搜索与本地勾选进度',
+        '五类拓展场景的实践流程、十项相对通用方案的独特特性，以及五轮真实开发历程与后续展望'
+      ],
+      /* 这篇笔记最值得记住的结论 */
+      highlight:
+        '算法层四个模块（<code>preference_loss</code> / <code>reward_normalizer</code> / ' +
+        '<code>reinforce</code> / <code>ppo</code>）<b>import 的项目内模块数为 0</b> —— ' +
+        '它们只依赖鸭子类型接口，所以换 backbone 时一行都不用改。' +
+        '另一半教训来自实测：奖励模型在弱数据下会走捷径（读 EOS 位置、只答一个词），' +
+        '所以必须另找一把尺子 —— 按与奖励模型无关的<b>含正向词率</b>衡量，' +
+        'Transformer 达到 <b>95.8%</b>，LSTM 只有 75.0%。'
     }
   ],
 
   /* ── 规划中（还没有内容，只占位；status 非 published 的不进统计） ── */
   roadmap: [
-    {
-      title: 'mini-rlhf 训练流程解读',
-      category: 'llm',
-      note: 'RLHF 的最小可运行实现：PPO 各阶段的数据流与显存账'
-    },
     {
       title: '量化策略的工程化实践',
       category: 'quant',

@@ -1,0 +1,2699 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RLHF Mini Pipeline · 系统架构与核心设计</title>
+<meta name="description" content="教学级 RLHF 实现的系统架构可视化：模块划分、调用关系、数据流、关键设计取舍、知识清单与开发历程。">
+<style>
+/* =====================================================================
+   设计令牌（Design Tokens）
+   ===================================================================== */
+:root{
+  --bg:#080d1c;
+  --bg-2:#0d1428;
+  --panel:#121a35;
+  --panel-2:#182144;
+  --panel-3:#1e2952;
+  --border:#26325c;
+  --border-2:#38477f;
+  --text:#e9edfa;
+  --text-2:#c3cbe6;
+  --muted:#93a0c6;
+  --dim:#6b789f;
+  --accent:#6ea8fe;
+  --accent-2:#a78bfa;
+  --accent-3:#22d3ee;
+  --ok:#34d399;
+  --warn:#fbbf24;
+  --bad:#fb7185;
+  --p0:#fb7185;
+  --p1:#fbbf24;
+  --p2:#38bdf8;
+  --radius:16px;
+  --radius-sm:10px;
+  --radius-xs:7px;
+  --shadow:0 12px 34px rgba(0,0,0,.42);
+  --shadow-sm:0 4px 14px rgba(0,0,0,.28);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --glow:0 0 0 1px rgba(110,168,254,.35),0 0 22px rgba(110,168,254,.18);
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc;
+  --bg-2:#ffffff;
+  --panel:#ffffff;
+  --panel-2:#f6f8fe;
+  --panel-3:#eef3fd;
+  --border:#e2e8f6;
+  --border-2:#c6d3ee;
+  --text:#0f1932;
+  --text-2:#2b3a5c;
+  --muted:#55628a;
+  --dim:#7d89a9;
+  --accent:#2f6fe4;
+  --accent-2:#7c4ddb;
+  --accent-3:#0e9bb8;
+  --ok:#0f9d67;
+  --warn:#b87708;
+  --bad:#d93f5c;
+  --p0:#d93f5c;
+  --p1:#b87708;
+  --p2:#1f7fd0;
+  --shadow:0 12px 30px rgba(23,48,102,.12);
+  --shadow-sm:0 4px 12px rgba(23,48,102,.09);
+  --glow:0 0 0 1px rgba(47,111,228,.35),0 0 20px rgba(47,111,228,.14);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:78px;-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  font-family:var(--sans);
+  background:var(--bg);
+  color:var(--text);
+  line-height:1.72;
+  font-size:15.5px;
+  overflow-x:hidden;
+}
+body::before{
+  content:"";
+  position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(900px 520px at 12% -6%, rgba(110,168,254,.16), transparent 62%),
+    radial-gradient(760px 460px at 92% 4%, rgba(167,139,250,.14), transparent 60%),
+    radial-gradient(700px 500px at 50% 108%, rgba(34,211,238,.10), transparent 62%);
+}
+html[data-theme="light"] body::before{
+  background:
+    radial-gradient(900px 520px at 12% -6%, rgba(47,111,228,.10), transparent 62%),
+    radial-gradient(760px 460px at 92% 4%, rgba(124,77,219,.09), transparent 60%),
+    radial-gradient(700px 500px at 50% 108%, rgba(14,155,184,.07), transparent 62%);
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd{font-family:var(--mono);font-size:.87em}
+code{
+  background:var(--panel-3);
+  border:1px solid var(--border);
+  border-radius:5px;
+  padding:1px 5px;
+  color:var(--text-2);
+  white-space:nowrap;
+}
+html[data-theme="light"] code{background:#eef2fb;border-color:#dde5f6}
+
+/* =====================================================================
+   布局
+   ===================================================================== */
+.wrap{max-width:1240px;margin:0 auto;padding:0 22px}
+.sec{padding:62px 0 10px;scroll-margin-top:78px}
+.sec-head{margin-bottom:26px;max-width:900px}
+.sec-kicker{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);background:rgba(110,168,254,.10);
+  border:1px solid rgba(110,168,254,.28);
+  padding:4px 11px;border-radius:999px;margin-bottom:12px;
+}
+html[data-theme="light"] .sec-kicker{background:rgba(47,111,228,.08);border-color:rgba(47,111,228,.24)}
+.sec h2{
+  font-size:clamp(21px,3.1vw,29px);
+  line-height:1.3;margin:0 0 10px;letter-spacing:-.015em;
+  font-weight:700;
+}
+.sec h2 .num{
+  font-family:var(--mono);font-size:.72em;color:var(--dim);
+  margin-right:9px;font-weight:600;
+}
+.sec-sub{color:var(--muted);font-size:14.6px;margin:0}
+.sec-rule{height:1px;background:linear-gradient(90deg,var(--border-2),transparent);margin:0 0 26px}
+
+/* =====================================================================
+   导航
+   ===================================================================== */
+.nav{
+  position:sticky;top:0;z-index:60;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  background:var(--bg);                                   /* 兜底：不支持 color-mix 时用纯色 */
+  background:color-mix(in srgb,var(--bg) 82%,transparent);
+  border-bottom:1px solid var(--border);
+}
+@supports not (backdrop-filter:blur(4px)){.nav{background:var(--bg)}}
+.nav-in{display:flex;align-items:center;gap:14px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;white-space:nowrap;flex:0 0 auto}
+.brand .logo{
+  width:26px;height:26px;border-radius:8px;flex:0 0 auto;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));
+  display:grid;place-items:center;font-size:13px;color:#fff;font-weight:800;
+}
+.brand small{display:block;font-size:10.5px;font-weight:500;color:var(--dim);letter-spacing:.06em;line-height:1.2}
+a.brand{text-decoration:none;color:inherit}
+/* 返回笔记首页（本页作为博客子页时使用，指向站点根目录） */
+.home-link{
+  flex:0 0 auto;font-size:12.4px;padding:6px 11px;border-radius:9px;white-space:nowrap;
+  border:1px solid var(--border);background:var(--panel);color:var(--muted);
+  text-decoration:none;transition:.16s;
+}
+.home-link:hover{color:var(--text);background:var(--panel-2);border-color:var(--border-2);text-decoration:none}
+.nav-links{
+  display:flex;gap:3px;overflow-x:auto;flex:1 1 auto;
+  scrollbar-width:none;-ms-overflow-style:none;
+}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links a{
+  font-size:13px;color:var(--muted);padding:6px 10px;border-radius:8px;
+  white-space:nowrap;text-decoration:none;transition:.16s;border:1px solid transparent;
+}
+.nav-links a:hover{color:var(--text);background:var(--panel-2);text-decoration:none}
+.nav-links a.on{color:var(--accent);background:rgba(110,168,254,.12);border-color:rgba(110,168,254,.26)}
+html[data-theme="light"] .nav-links a.on{background:rgba(47,111,228,.10);border-color:rgba(47,111,228,.22)}
+.icon-btn{
+  flex:0 0 auto;width:36px;height:36px;display:grid;place-items:center;
+  border-radius:10px;border:1px solid var(--border);background:var(--panel);
+  color:var(--text-2);cursor:pointer;font-size:15px;transition:.16s;
+}
+.icon-btn:hover{border-color:var(--border-2);color:var(--text);background:var(--panel-2)}
+.nav-prog{
+  position:absolute;left:0;bottom:-1px;height:2px;width:0;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  transition:width .1s linear;
+}
+
+/* =====================================================================
+   Hero
+   ===================================================================== */
+.hero{padding:64px 0 26px;position:relative}
+.hero h1{
+  font-size:clamp(28px,5.4vw,48px);line-height:1.14;margin:0 0 16px;
+  letter-spacing:-.028em;font-weight:800;
+}
+.hero h1 .grad{
+  background:linear-gradient(100deg,var(--accent),var(--accent-2) 55%,var(--accent-3));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+.hero p.lead{font-size:clamp(15px,2vw,17.5px);color:var(--text-2);max-width:790px;margin:0 0 8px}
+.hero p.lead-sub{font-size:14.4px;color:var(--muted);max-width:790px;margin:0 0 26px}
+.tag-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px}
+.tag{
+  font-size:12.4px;font-family:var(--mono);padding:5px 11px;border-radius:999px;
+  border:1px solid var(--border);background:var(--panel);color:var(--text-2);
+}
+.tag.hi{border-color:rgba(110,168,254,.35);color:var(--accent);background:rgba(110,168,254,.09)}
+.tag.g{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+.tag.w{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+.stat-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;
+}
+.stat{
+  background:linear-gradient(160deg,var(--panel),var(--panel-2));
+  border:1px solid var(--border);border-radius:var(--radius);padding:15px 16px;
+  box-shadow:var(--shadow-sm);
+}
+.stat .v{font-size:clamp(19px,2.6vw,25px);font-weight:750;font-family:var(--mono);letter-spacing:-.02em;line-height:1.2}
+.stat .k{font-size:11.6px;color:var(--muted);margin-top:5px;letter-spacing:.03em}
+.stat.a .v{color:var(--accent)}
+.stat.b .v{color:var(--accent-2)}
+.stat.c .v{color:var(--accent-3)}
+.stat.d .v{color:var(--ok)}
+
+/* =====================================================================
+   通用卡片 / 网格
+   ===================================================================== */
+.grid{display:grid;gap:13px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(310px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(248px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(196px,1fr))}
+.card{
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+  padding:17px 18px;transition:.18s;position:relative;
+}
+.card:hover{border-color:var(--border-2);box-shadow:var(--shadow-sm);transform:translateY(-1px)}
+.card h3{margin:0 0 8px;font-size:15.4px;font-weight:680;letter-spacing:-.008em}
+.card p{margin:0;color:var(--muted);font-size:13.9px;line-height:1.68}
+.card .ico{font-size:19px;margin-bottom:9px;display:block;line-height:1}
+.callout{
+  border-radius:var(--radius);padding:14px 17px;font-size:14.1px;line-height:1.72;
+  border:1px solid var(--border);background:var(--panel-2);color:var(--text-2);
+  border-left:3px solid var(--accent);
+}
+.callout.w{border-left-color:var(--warn)}
+.callout.b{border-left-color:var(--bad)}
+.callout.g{border-left-color:var(--ok)}
+.callout b{color:var(--text)}
+.callout .t{display:block;font-weight:680;color:var(--text);margin-bottom:3px;font-size:13.9px}
+
+/* =====================================================================
+   分层架构图
+   ===================================================================== */
+.arch{display:flex;flex-direction:column;gap:9px}
+.arch-layer{
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:linear-gradient(150deg,var(--panel),var(--panel-2));
+  padding:14px 16px;display:grid;grid-template-columns:186px 1fr;gap:16px;align-items:center;
+  transition:.18s;
+}
+.arch-layer:hover{border-color:var(--border-2)}
+.arch-layer.sel{border-color:var(--accent);box-shadow:var(--glow)}
+.arch-tag{display:flex;align-items:center;gap:10px}
+.arch-num{
+  width:28px;height:28px;border-radius:9px;flex:0 0 auto;display:grid;place-items:center;
+  font-family:var(--mono);font-size:12.5px;font-weight:700;color:#fff;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));
+}
+.arch-tag .nm{font-weight:680;font-size:14.4px;line-height:1.28}
+.arch-tag .en{font-family:var(--mono);font-size:10.6px;color:var(--dim);letter-spacing:.05em}
+.arch-mods{display:flex;flex-wrap:wrap;gap:7px}
+.chip{
+  font-family:var(--mono);font-size:12.2px;padding:5px 10px;border-radius:8px;
+  border:1px solid var(--border);background:var(--panel-3);color:var(--text-2);
+  cursor:pointer;transition:.15s;white-space:nowrap;
+}
+.chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(110,168,254,.10)}
+.chip.dim{opacity:.42}
+.arch-arrow{
+  display:flex;align-items:center;gap:9px;padding-left:26px;
+  font-size:11.8px;color:var(--dim);font-family:var(--mono);
+}
+.arch-arrow .ln{width:1px;height:16px;background:var(--border-2)}
+.arch-arrow .txt{letter-spacing:.02em}
+
+/* =====================================================================
+   模块卡片
+   ===================================================================== */
+.mod-card{
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:13px 14px;cursor:pointer;transition:.16s;text-align:left;
+  display:flex;flex-direction:column;gap:7px;font-family:inherit;color:inherit;
+}
+.mod-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:var(--shadow-sm)}
+.mod-card .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mod-card .fn{font-family:var(--mono);font-size:12.7px;font-weight:650;color:var(--text);word-break:break-all}
+.mod-card .role{font-size:12.7px;color:var(--muted);line-height:1.6}
+.lay{
+  font-size:10.4px;font-family:var(--mono);padding:2px 7px;border-radius:999px;
+  border:1px solid var(--border-2);color:var(--muted);flex:0 0 auto;
+}
+.lay.infra{color:var(--dim);border-color:var(--border-2)}
+.lay.data{color:var(--accent-3);border-color:color-mix(in srgb,var(--accent-3) 45%,transparent)}
+.lay.model{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.lay.algo{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 45%,transparent)}
+.lay.script{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+.legend{display:flex;flex-wrap:wrap;gap:9px;margin:0 0 16px;font-size:12.3px;color:var(--muted);align-items:center}
+.legend .k{display:inline-flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+/* =====================================================================
+   依赖矩阵
+   ===================================================================== */
+.matrix-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel)}
+table.mx{border-collapse:separate;border-spacing:0;font-size:12.2px}
+table.mx th,table.mx td{padding:0;text-align:center}
+table.mx thead th{
+  position:sticky;top:0;z-index:2;background:var(--panel-2);
+  height:88px;width:30px;border-bottom:1px solid var(--border);
+}
+table.mx thead th .rot{
+  writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);
+  font-size:10.7px;color:var(--muted);font-weight:500;letter-spacing:.02em;
+  display:inline-block;padding:5px 0;
+}
+table.mx tbody th{
+  position:sticky;left:0;z-index:1;background:var(--panel-2);
+  font-family:var(--mono);font-size:11.3px;font-weight:500;color:var(--text-2);
+  text-align:left;padding:0 10px;height:28px;white-space:nowrap;
+  border-right:1px solid var(--border);cursor:pointer;
+}
+table.mx tbody th:hover{color:var(--accent)}
+table.mx thead th:first-child{left:0;z-index:3;background:var(--panel-2);border-right:1px solid var(--border)}
+table.mx td{height:28px;width:30px;border-bottom:1px solid color-mix(in srgb,var(--border) 55%,transparent)}
+table.mx tbody tr:hover th{background:var(--panel-3);color:var(--accent)}
+table.mx td .cell{
+  width:100%;height:100%;display:grid;place-items:center;
+}
+table.mx td .mk{
+  width:9px;height:9px;border-radius:50%;background:var(--accent);
+  opacity:0;transition:.12s;
+}
+table.mx td.hit .mk{opacity:.92}
+table.mx td.self .mk{background:var(--dim);opacity:.42;border-radius:2px;width:10px;height:3px}
+table.mx td.hl{background:rgba(110,168,254,.14)}
+html[data-theme="light"] table.mx td.hl{background:rgba(47,111,228,.10)}
+table.mx td.hl .mk{opacity:1;transform:scale(1.35)}
+table.mx .lbl{
+  font-family:var(--mono);font-size:11.4px;color:var(--text-2);
+}
+.mx-note{font-size:12.6px;color:var(--dim);margin-top:10px}
+.mx-tip{
+  position:fixed;z-index:80;pointer-events:none;opacity:0;transition:opacity .12s;
+  background:var(--panel-3);border:1px solid var(--border-2);border-radius:8px;
+  padding:6px 10px;font-family:var(--mono);font-size:11.6px;color:var(--text);
+  box-shadow:var(--shadow-sm);white-space:nowrap;
+}
+.mx-tip.on{opacity:1}
+
+/* =====================================================================
+   依赖明细浏览器
+   ===================================================================== */
+.explorer{display:grid;grid-template-columns:236px 1fr;gap:14px;align-items:start}
+.ex-list{
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);
+  padding:9px;max-height:430px;overflow-y:auto;
+}
+.ex-grp{font-size:10.6px;font-family:var(--mono);color:var(--dim);letter-spacing:.11em;
+  text-transform:uppercase;padding:9px 8px 5px}
+.ex-item{
+  display:block;width:100%;text-align:left;font-family:var(--mono);font-size:12.2px;
+  padding:6px 9px;border-radius:8px;border:1px solid transparent;background:none;
+  color:var(--text-2);cursor:pointer;transition:.14s;
+}
+.ex-item:hover{background:var(--panel-2);color:var(--text)}
+.ex-item.on{background:rgba(110,168,254,.13);border-color:rgba(110,168,254,.3);color:var(--accent)}
+html[data-theme="light"] .ex-item.on{background:rgba(47,111,228,.10);border-color:rgba(47,111,228,.24)}
+.ex-panel{
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);
+  padding:18px 19px;min-height:300px;
+}
+.ex-panel h3{margin:0 0 4px;font-family:var(--mono);font-size:15px}
+.ex-panel .role{color:var(--muted);font-size:13.9px;margin:0 0 16px}
+.ex-sec{margin-bottom:15px}
+.ex-sec .h{
+  font-size:11.3px;font-family:var(--mono);color:var(--dim);letter-spacing:.1em;
+  text-transform:uppercase;margin-bottom:8px;
+}
+.ex-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ex-chips .none{font-size:12.6px;color:var(--dim);font-style:italic}
+.fn-list{display:flex;flex-wrap:wrap;gap:6px}
+.fn{
+  font-family:var(--mono);font-size:11.8px;padding:3px 8px;border-radius:6px;
+  background:var(--panel-3);border:1px solid var(--border);color:var(--text-2);
+}
+.zero-dep{
+  display:inline-flex;align-items:center;gap:6px;font-size:12.4px;color:var(--ok);
+  border:1px dashed color-mix(in srgb,var(--ok) 45%,transparent);
+  background:color-mix(in srgb,var(--ok) 8%,transparent);
+  padding:5px 10px;border-radius:8px;
+}
+
+/* =====================================================================
+   数据流
+   ===================================================================== */
+.flow-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
+.ftab{
+  font-family:inherit;font-size:13.4px;padding:8px 15px;border-radius:10px;
+  border:1px solid var(--border);background:var(--panel);color:var(--muted);
+  cursor:pointer;transition:.16s;display:flex;align-items:center;gap:8px;
+}
+.ftab:hover{color:var(--text);border-color:var(--border-2)}
+.ftab.on{background:linear-gradient(135deg,rgba(110,168,254,.18),rgba(167,139,250,.14));
+  border-color:var(--accent);color:var(--text);font-weight:600}
+.ftab .n{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.ftab.on .n{color:var(--accent)}
+.flow-body{display:none}
+.flow-body.on{display:block;animation:fade .28s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.steps{display:flex;flex-direction:column;gap:0;position:relative}
+.step{
+  display:grid;grid-template-columns:38px 1fr;gap:14px;position:relative;
+  padding-bottom:16px;
+}
+.step:last-child{padding-bottom:0}
+.step .rail{display:flex;flex-direction:column;align-items:center}
+.step .bullet{
+  width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+  font-family:var(--mono);font-size:12.4px;font-weight:700;
+  background:var(--panel-3);border:1px solid var(--border-2);color:var(--accent);
+  z-index:1;
+}
+.step .line{flex:1 1 auto;width:2px;background:var(--border);margin:3px 0 -3px}
+.step:last-child .line{display:none}
+.step-body{
+  border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel);
+  padding:12px 15px;transition:.16s;
+}
+.step-body:hover{border-color:var(--border-2)}
+.step-body .st{font-weight:660;font-size:14.2px;margin-bottom:3px}
+.step-body .sd{font-size:13.4px;color:var(--muted);line-height:1.66}
+.step-body .sd + .sd{margin-top:6px}
+.shape{
+  display:inline-block;font-family:var(--mono);font-size:11.9px;
+  background:color-mix(in srgb,var(--accent) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);
+  color:var(--accent);border-radius:6px;padding:1px 7px;margin:0 2px;
+  white-space:nowrap;
+}
+.shape.v{background:color-mix(in srgb,var(--accent-2) 12%,transparent);
+  border-color:color-mix(in srgb,var(--accent-2) 32%,transparent);color:var(--accent-2)}
+.shape.g{background:color-mix(in srgb,var(--ok) 12%,transparent);
+  border-color:color-mix(in srgb,var(--ok) 32%,transparent);color:var(--ok)}
+.shape.w{background:color-mix(in srgb,var(--warn) 12%,transparent);
+  border-color:color-mix(in srgb,var(--warn) 32%,transparent);color:var(--warn)}
+.formula{
+  font-family:var(--mono);font-size:12.7px;background:var(--panel-2);
+  border:1px solid var(--border);border-left:3px solid var(--accent-2);
+  border-radius:8px;padding:9px 12px;margin:8px 0 0;color:var(--text-2);
+  overflow-x:auto;white-space:pre;
+}
+
+/* =====================================================================
+   表格（决策 / 对照）
+   ===================================================================== */
+.tbl-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel)}
+table.tb{width:100%;border-collapse:collapse;font-size:13.5px;min-width:660px}
+table.tb thead th{
+  background:var(--panel-2);text-align:left;padding:11px 14px;font-size:12.4px;
+  color:var(--muted);font-weight:640;letter-spacing:.04em;
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+table.tb td{padding:11px 14px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);
+  vertical-align:top;color:var(--text-2);line-height:1.62}
+table.tb tbody tr:last-child td{border-bottom:none}
+table.tb tbody tr:hover{background:var(--panel-2)}
+table.tb td.strong{color:var(--text);font-weight:600}
+table.tb td.mono{font-family:var(--mono);font-size:12.4px}
+.pill{
+  display:inline-block;font-size:11.2px;font-family:var(--mono);padding:2px 8px;
+  border-radius:999px;border:1px solid var(--border-2);color:var(--muted);white-space:nowrap;
+}
+.pill.hi{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent);background:rgba(110,168,254,.10)}
+.pill.g{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+.pill.w{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+.pill.b{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+
+/* =====================================================================
+   知识清单
+   ===================================================================== */
+.k-toolbar{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);
+  padding:13px 15px;
+}
+.k-toolbar .lbl{font-size:12.3px;color:var(--dim);font-family:var(--mono)}
+#catFilters{display:contents}
+.fchip{
+  font-family:inherit;font-size:12.6px;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--border);background:var(--panel-2);color:var(--muted);
+  cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:6px;
+}
+.fchip:hover{color:var(--text);border-color:var(--border-2)}
+.fchip.on{color:var(--text);border-color:var(--accent);background:rgba(110,168,254,.13)}
+html[data-theme="light"] .fchip.on{background:rgba(47,111,228,.11)}
+.fchip[data-pri="P0"].on{border-color:var(--p0);color:var(--p0);background:color-mix(in srgb,var(--p0) 12%,transparent)}
+.fchip[data-pri="P1"].on{border-color:var(--p1);color:var(--p1);background:color-mix(in srgb,var(--p1) 12%,transparent)}
+.fchip[data-pri="P2"].on{border-color:var(--p2);color:var(--p2);background:color-mix(in srgb,var(--p2) 12%,transparent)}
+.fchip .cnt{font-family:var(--mono);font-size:10.6px;color:var(--dim)}
+input.search{
+  font-family:inherit;font-size:13.2px;padding:7px 12px;border-radius:10px;
+  border:1px solid var(--border);background:var(--panel-2);color:var(--text);
+  min-width:170px;flex:1 1 170px;outline:none;transition:.15s;
+}
+input.search:focus{border-color:var(--accent);box-shadow:var(--glow)}
+.k-progress{display:flex;align-items:center;gap:11px;margin-left:auto;font-size:12.4px;color:var(--muted)}
+.k-bar{width:112px;height:6px;border-radius:999px;background:var(--panel-3);overflow:hidden}
+.k-bar i{display:block;height:100%;width:0;border-radius:999px;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .3s}
+.k-grp{margin-bottom:20px}
+.k-grp-h{
+  display:flex;align-items:center;gap:10px;margin:0 0 11px;font-size:14.6px;font-weight:680;
+}
+.k-grp-h .cnt{font-family:var(--mono);font-size:11.4px;color:var(--dim);font-weight:400}
+.k-grp-h .bar{flex:1 1 auto;height:1px;background:var(--border)}
+.k-item{
+  display:grid;grid-template-columns:22px 1fr auto;gap:11px;align-items:start;
+  border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel);
+  padding:11px 13px;transition:.15s;
+}
+.k-item:hover{border-color:var(--border-2);background:var(--panel-2)}
+.k-item.done{opacity:.56}
+.k-item.done .kt{text-decoration:line-through;text-decoration-color:var(--dim)}
+.k-chk{
+  width:19px;height:19px;border-radius:6px;border:1.5px solid var(--border-2);
+  background:transparent;cursor:pointer;display:grid;place-items:center;
+  color:transparent;font-size:11px;margin-top:3px;transition:.15s;padding:0;
+}
+.k-chk:hover{border-color:var(--accent)}
+.k-item.done .k-chk{background:var(--ok);border-color:var(--ok);color:#04121b}
+.kt{font-size:14px;font-weight:620;color:var(--text);margin-bottom:2px}
+.kd{font-size:12.9px;color:var(--muted);line-height:1.62}
+.ktags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.ktag{font-family:var(--mono);font-size:10.6px;color:var(--dim);border:1px solid var(--border);
+  border-radius:5px;padding:1px 6px}
+.pri{
+  font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;
+  white-space:nowrap;
+}
+.pri.P0{color:var(--p0);background:color-mix(in srgb,var(--p0) 14%,transparent);border:1px solid color-mix(in srgb,var(--p0) 40%,transparent)}
+.pri.P1{color:var(--p1);background:color-mix(in srgb,var(--p1) 14%,transparent);border:1px solid color-mix(in srgb,var(--p1) 40%,transparent)}
+.pri.P2{color:var(--p2);background:color-mix(in srgb,var(--p2) 14%,transparent);border:1px solid color-mix(in srgb,var(--p2) 40%,transparent)}
+.k-empty{text-align:center;color:var(--dim);padding:34px 0;font-size:13.6px}
+
+/* 学习路径 */
+.path{display:flex;flex-direction:column;gap:11px}
+.phase{
+  display:grid;grid-template-columns:120px 1fr;gap:15px;border:1px solid var(--border);
+  border-radius:var(--radius);background:var(--panel);padding:14px 16px;align-items:start;
+}
+.phase .ph-l{font-family:var(--mono);font-size:11.6px;color:var(--accent);letter-spacing:.06em}
+.phase .ph-l b{display:block;font-size:14.4px;color:var(--text);font-family:var(--sans);
+  letter-spacing:0;margin-bottom:3px;font-weight:680}
+.phase .ph-l span{color:var(--dim);font-size:11px}
+.phase .ph-r{font-size:13.5px;color:var(--muted);line-height:1.7}
+.phase .ph-r b{color:var(--text-2)}
+
+/* =====================================================================
+   手风琴（拓展流程）
+   ===================================================================== */
+.acc{border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);overflow:hidden;margin-bottom:11px}
+.acc-h{
+  width:100%;display:flex;align-items:center;gap:12px;padding:15px 17px;
+  background:none;border:none;font-family:inherit;color:inherit;cursor:pointer;
+  text-align:left;transition:.15s;
+}
+.acc-h:hover{background:var(--panel-2)}
+.acc-h .ic{
+  width:32px;height:32px;border-radius:9px;flex:0 0 auto;display:grid;place-items:center;
+  background:linear-gradient(135deg,rgba(110,168,254,.18),rgba(167,139,250,.14));
+  border:1px solid var(--border-2);font-size:15px;
+}
+.acc-h .tx{flex:1 1 auto}
+.acc-h .tt{font-size:14.8px;font-weight:660}
+.acc-h .ts{font-size:12.7px;color:var(--muted);margin-top:1px}
+.acc-h .ar{color:var(--dim);transition:transform .22s;font-size:13px;flex:0 0 auto}
+.acc.open .acc-h .ar{transform:rotate(90deg)}
+.acc-b{display:none;padding:0 17px 18px 61px}
+.acc.open .acc-b{display:block;animation:fade .24s ease}
+.ol{margin:0;padding:0;list-style:none;counter-reset:s}
+.ol li{
+  counter-increment:s;position:relative;padding:0 0 12px 30px;font-size:13.6px;
+  color:var(--text-2);line-height:1.7;
+}
+.ol li::before{
+  content:counter(s);position:absolute;left:0;top:1px;width:20px;height:20px;
+  border-radius:6px;background:var(--panel-3);border:1px solid var(--border-2);
+  color:var(--accent);font-family:var(--mono);font-size:11px;font-weight:700;
+  display:grid;place-items:center;
+}
+.ol li:last-child{padding-bottom:0}
+.ol li b{color:var(--text)}
+.kd-box{
+  margin-top:12px;border:1px dashed color-mix(in srgb,var(--warn) 46%,transparent);
+  background:color-mix(in srgb,var(--warn) 7%,transparent);
+  border-radius:var(--radius-sm);padding:12px 14px;font-size:13.2px;line-height:1.7;
+  color:var(--text-2);
+}
+.kd-box .h{font-weight:680;color:var(--warn);font-size:12.7px;margin-bottom:5px;
+  font-family:var(--mono);letter-spacing:.05em}
+.kd-box ul{margin:0;padding-left:17px}
+.kd-box li{margin-bottom:4px}
+.kd-box li:last-child{margin-bottom:0}
+
+/* =====================================================================
+   时间线
+   ===================================================================== */
+.tl{position:relative;padding-left:26px}
+.tl::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;
+  background:linear-gradient(180deg,var(--accent),var(--accent-2),transparent)}
+.tl-item{position:relative;margin-bottom:16px}
+.tl-item::before{
+  content:"";position:absolute;left:-24px;top:6px;width:12px;height:12px;border-radius:50%;
+  background:var(--bg);border:2px solid var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent);
+}
+.tl-item.now::before{border-color:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 18%,transparent)}
+.tl-card{border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);padding:14px 16px}
+.tl-when{font-family:var(--mono);font-size:11.4px;color:var(--accent);letter-spacing:.05em;margin-bottom:4px}
+.tl-item.now .tl-when{color:var(--ok)}
+.tl-card h4{margin:0 0 7px;font-size:15px;font-weight:670}
+.tl-card p{margin:0 0 8px;font-size:13.5px;color:var(--muted);line-height:1.68}
+.tl-card p:last-child{margin-bottom:0}
+.tl-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+
+/* =====================================================================
+   模态框
+   ===================================================================== */
+.modal-bg{
+  position:fixed;inset:0;z-index:90;background:rgba(4,8,20,.72);
+  backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
+  display:none;align-items:center;justify-content:center;padding:20px;
+}
+.modal-bg.on{display:flex;animation:fade .18s ease}
+.modal{
+  background:var(--panel);border:1px solid var(--border-2);border-radius:var(--radius);
+  box-shadow:var(--shadow);max-width:660px;width:100%;max-height:86vh;overflow-y:auto;
+  padding:22px 24px;position:relative;
+}
+.modal .x{
+  position:absolute;top:13px;right:13px;width:32px;height:32px;border-radius:9px;
+  border:1px solid var(--border);background:var(--panel-2);color:var(--muted);
+  cursor:pointer;font-size:15px;display:grid;place-items:center;
+}
+.modal .x:hover{color:var(--text);border-color:var(--border-2)}
+.modal h3{margin:0 0 4px;font-family:var(--mono);font-size:17px;padding-right:40px}
+.modal .mrole{color:var(--muted);font-size:14px;margin:0 0 17px;line-height:1.68}
+.modal .msec{margin-bottom:15px}
+.modal .msec .h{font-size:11.3px;font-family:var(--mono);color:var(--dim);
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+
+/* =====================================================================
+   页脚 / 回到顶部
+   ===================================================================== */
+.foot{
+  margin-top:64px;border-top:1px solid var(--border);padding:30px 0 46px;
+  color:var(--dim);font-size:13px;
+}
+.foot-in{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:flex-start}
+.foot code{font-size:12px}
+.to-top{
+  position:fixed;right:18px;bottom:18px;z-index:70;width:42px;height:42px;border-radius:12px;
+  border:1px solid var(--border-2);background:var(--panel);color:var(--text-2);
+  cursor:pointer;display:grid;place-items:center;font-size:15px;
+  box-shadow:var(--shadow-sm);opacity:0;pointer-events:none;transition:.22s;
+}
+.to-top.on{opacity:1;pointer-events:auto}
+.to-top:hover{border-color:var(--accent);color:var(--accent)}
+
+/* =====================================================================
+   响应式
+   ===================================================================== */
+@media (max-width:900px){
+  .explorer{grid-template-columns:1fr}
+  .ex-list{max-height:210px}
+  .arch-layer{grid-template-columns:1fr;gap:11px}
+  .phase{grid-template-columns:1fr;gap:8px}
+}
+@media (max-width:640px){
+  body{font-size:15px}
+  .wrap{padding:0 15px}
+  .sec{padding:46px 0 6px}
+  .hero{padding:44px 0 18px}
+  .nav-in{height:56px;gap:10px}
+  .brand small{display:none}
+  .nav-links a{padding:6px 8px;font-size:12.4px}
+  .acc-b{padding:0 15px 16px 15px}
+  .k-toolbar{padding:11px 12px;gap:8px}
+  .k-progress{margin-left:0;width:100%}
+  .k-item{grid-template-columns:22px 1fr;row-gap:7px}
+  .k-item .pri{grid-column:2;justify-self:start}
+  .tl{padding-left:22px}
+  .modal{padding:18px 16px}
+  .stat{padding:13px 14px}
+  .foot-in{flex-direction:column}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important;transition-duration:.001ms !important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<!-- ================= 导航 ================= -->
+<nav class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="../../" title="返回笔记首页">
+      <span class="logo">R</span>
+      <span>RLHF Mini<small>架构与设计</small></span>
+    </a>
+    <a class="home-link" href="../../">← 笔记首页</a>
+    <div class="nav-links" id="navLinks">
+      <a href="#arch">架构总览</a>
+      <a href="#modules">模块职责</a>
+      <a href="#deps">调用关系</a>
+      <a href="#flow">数据流</a>
+      <a href="#decisions">设计取舍</a>
+      <a href="#knowledge">知识清单</a>
+      <a href="#extend">拓展流程</a>
+      <a href="#unique">独特特性</a>
+      <a href="#history">开发历程</a>
+      <a href="#outlook">展望</a>
+    </div>
+    <button class="icon-btn" id="themeBtn" title="切换主题" aria-label="切换主题">◐</button>
+  </div>
+  <div class="nav-prog" id="navProg"></div>
+</nav>
+
+<!-- ================= Hero ================= -->
+<header class="wrap hero">
+  <h1>RLHF Mini Pipeline<br><span class="grad">系统架构与核心设计</span></h1>
+  <p class="lead">
+    一个面向入门学习者的、<b>教学级 RLHF 实现</b>：从偏好数据到 PPO 对齐，全部用纯 PyTorch 从零写起。
+    本文把它拆成可点击的架构图、依赖矩阵、张量级数据流和知识清单 —— 让"RLHF 到底在干什么"变得看得见。
+  </p>
+  <p class="lead-sub">
+    不需要强化学习背景，也不需要 GPU。整个流程在笔记本 CPU 上两分钟内跑完。
+  </p>
+  <div class="tag-row">
+    <span class="tag hi">纯 PyTorch · 零对齐库</span>
+    <span class="tag hi">CPU 可跑</span>
+    <span class="tag">19 个模块</span>
+    <span class="tag g">骨干可一行切换</span>
+    <span class="tag g">全流程可复现（seed=42）</span>
+    <span class="tag w">3 个 reward hacking 已修复</span>
+  </div>
+  <div class="stat-grid">
+    <div class="stat a"><div class="v">42 万</div><div class="k">策略参数量（Transformer）</div></div>
+    <div class="stat b"><div class="v">36</div><div class="k">词表 token 数</div></div>
+    <div class="stat c"><div class="v">3 + 1</div><div class="k">三阶段流水线 + 消融</div></div>
+    <div class="stat d"><div class="v">≈2 min</div><div class="k">CPU 全流程耗时</div></div>
+  </div>
+</header>
+
+<!-- ================= §1 架构总览 ================= -->
+<section class="sec wrap" id="arch">
+  <div class="sec-head">
+    <span class="sec-kicker">01 / Architecture</span>
+    <h2><span class="num">§1</span>系统架构总览</h2>
+    <p class="sec-sub">
+      整个项目按<b>五层</b>组织，自上而下是"谁指挥谁"。最关键的架构决策是：
+      <b>算法层不依赖模型层</b>——算法只认接口，不认具体实现。点击任意模块查看细节。
+    </p>
+  </div>
+  <div class="sec-rule"></div>
+
+  <div class="arch" id="archStack">
+    <div class="arch-layer" data-layer="script">
+      <div class="arch-tag">
+        <span class="arch-num">⑤</span>
+        <span><span class="nm">编排层</span><br><span class="en">SCRIPTS</span></span>
+      </div>
+      <div class="arch-mods">
+        <button class="chip" data-mod="train_sft">train_sft.py</button>
+        <button class="chip" data-mod="train_reward_model">train_reward_model.py</button>
+        <button class="chip" data-mod="train_ppo">train_ppo.py</button>
+        <button class="chip" data-mod="train_reinforce">train_reinforce.py</button>
+        <button class="chip" data-mod="evaluate">evaluate.py</button>
+        <button class="chip" data-mod="ablation_kl">ablation_kl.py</button>
+      </div>
+    </div>
+    <div class="arch-arrow"><span class="ln"></span><span class="txt">组装：按顺序调用算法与模型，负责"跑哪一步、存哪个文件"</span></div>
+
+    <div class="arch-layer" data-layer="algo">
+      <div class="arch-tag">
+        <span class="arch-num">④</span>
+        <span><span class="nm">算法层</span><br><span class="en">ALGORITHMS</span></span>
+      </div>
+      <div class="arch-mods">
+        <button class="chip" data-mod="preference_loss">preference_loss.py</button>
+        <button class="chip" data-mod="reward_normalizer">reward_normalizer.py</button>
+        <button class="chip" data-mod="reinforce">reinforce.py</button>
+        <button class="chip" data-mod="ppo">ppo.py</button>
+      </div>
+    </div>
+    <div class="arch-arrow"><span class="ln"></span><span class="txt">通过统一接口调用：generate / completion_log_probs / value（不 import 任何模型类）</span></div>
+
+    <div class="arch-layer" data-layer="model">
+      <div class="arch-tag">
+        <span class="arch-num">③</span>
+        <span><span class="nm">模型层</span><br><span class="en">MODELS</span></span>
+      </div>
+      <div class="arch-mods">
+        <button class="chip" data-mod="models">models.py<span style="color:var(--dim)"> ·工厂</span></button>
+        <button class="chip" data-mod="mini_transformer">mini_transformer.py</button>
+        <button class="chip" data-mod="mini_lm">mini_lm.py</button>
+        <button class="chip" data-mod="reward_model">reward_model.py</button>
+        <button class="chip" data-mod="reference_model">reference_model.py</button>
+      </div>
+    </div>
+    <div class="arch-arrow"><span class="ln"></span><span class="txt">读取：把文本变成 id 与张量，把 id 还原成人类可读的回答</span></div>
+
+    <div class="arch-layer" data-layer="data">
+      <div class="arch-tag">
+        <span class="arch-num">②</span>
+        <span><span class="nm">数据层</span><br><span class="en">DATA</span></span>
+      </div>
+      <div class="arch-mods">
+        <button class="chip" data-mod="tokenizer">tokenizer.py</button>
+        <button class="chip" data-mod="toy_dataset">toy_dataset.py</button>
+      </div>
+    </div>
+    <div class="arch-arrow"><span class="ln"></span><span class="txt">依赖：所有层都从基础层取超参与工具函数</span></div>
+
+    <div class="arch-layer" data-layer="infra">
+      <div class="arch-tag">
+        <span class="arch-num">①</span>
+        <span><span class="nm">基础层</span><br><span class="en">INFRASTRUCTURE</span></span>
+      </div>
+      <div class="arch-mods">
+        <button class="chip" data-mod="config">config.py</button>
+        <button class="chip" data-mod="utils">utils.py</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid g3" style="margin-top:20px">
+    <div class="card">
+      <span class="ico">🧩</span>
+      <h3>依赖倒置：算法只认接口</h3>
+      <p><code>ppo.py</code>、<code>reinforce.py</code>、<code>preference_loss.py</code>、
+      <code>reward_normalizer.py</code> <b>一行都不 import 项目内的其它模块</b>，只依赖 <code>torch</code>。
+      它们通过"鸭子类型"调用 <code>generate()</code> / <code>completion_log_probs()</code> / <code>value()</code>。
+      换骨干不用改算法，换算法不用改模型。</p>
+    </div>
+    <div class="card">
+      <span class="ico">🏭</span>
+      <h3>工厂模式：一行切换骨干</h3>
+      <p>所有脚本通过 <code>models.build_backbone()</code> 取模型，不直接 <code>new</code> 具体类。
+      于是 <code>config.arch</code> 从 <code>"transformer"</code> 改成 <code>"lstm"</code> 就能整体换骨干，
+      其余脚本零改动。</p>
+    </div>
+    <div class="card">
+      <span class="ico">📦</span>
+      <h3>checkpoint 解耦三个阶段</h3>
+      <p>SFT → RM → PPO 通过磁盘上的 <code>.pt</code> 文件串联，
+      三个阶段可以独立运行、独立调试、独立替换。代价是必须保证
+      <b>序列形态一致</b>（回答末尾都要追加 <code>&lt;eos&gt;</code>）。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §2 模块职责 ================= -->
+<section class="sec wrap" id="modules">
+  <div class="sec-head">
+    <span class="sec-kicker">02 / Modules</span>
+    <h2><span class="num">§2</span>模块划分与职责</h2>
+    <p class="sec-sub">共 19 个模块。点击卡片查看它的对外接口、依赖与被依赖关系。</p>
+  </div>
+  <div class="sec-rule"></div>
+  <div class="legend">
+    <span class="k"><i class="dot" style="background:var(--dim)"></i>基础层</span>
+    <span class="k"><i class="dot" style="background:var(--accent-3)"></i>数据层</span>
+    <span class="k"><i class="dot" style="background:var(--accent)"></i>模型层</span>
+    <span class="k"><i class="dot" style="background:var(--accent-2)"></i>算法层</span>
+    <span class="k"><i class="dot" style="background:var(--ok)"></i>编排层</span>
+  </div>
+  <div class="grid g3" id="modGrid"></div>
+</section>
+
+<!-- ================= §3 调用关系 ================= -->
+<section class="sec wrap" id="deps">
+  <div class="sec-head">
+    <span class="sec-kicker">03 / Dependencies</span>
+    <h2><span class="num">§3</span>模块间调用关系</h2>
+    <p class="sec-sub">
+      行 = 调用方，列 = 被调用方。<b>实心点</b>表示"这一行 import 了这一列"。
+      悬停高亮整行整列，点击行名查看模块详情。注意算法层那四行是<b>空的</b>。
+    </p>
+  </div>
+  <div class="sec-rule"></div>
+  <div class="matrix-scroll">
+    <table class="mx" id="mxTable"></table>
+  </div>
+  <p class="mx-note" id="mxNote"></p>
+
+  <h3 style="margin:28px 0 12px;font-size:16px">依赖明细浏览器</h3>
+  <div class="explorer">
+    <div class="ex-list" id="exList"></div>
+    <div class="ex-panel" id="exPanel"></div>
+  </div>
+</section>
+
+<!-- ================= §4 数据流 ================= -->
+<section class="sec wrap" id="flow">
+  <div class="sec-head">
+    <span class="sec-kicker">04 / Data Flow</span>
+    <h2><span class="num">§4</span>数据流向（张量级）</h2>
+    <p class="sec-sub">
+      四张"数据流地图"。每一步都标出了<b>张量形状</b>与<b>所在函数</b>——
+      照着它就能在代码里对上号。切换标签查看不同阶段。
+    </p>
+  </div>
+  <div class="sec-rule"></div>
+
+  <div class="flow-tabs" id="flowTabs">
+    <button class="ftab on" data-flow="f-sft"><span class="n">①</span>SFT 监督微调</button>
+    <button class="ftab" data-flow="f-rm"><span class="n">②</span>奖励模型</button>
+    <button class="ftab" data-flow="f-ppo"><span class="n">③</span>PPO 对齐</button>
+    <button class="ftab" data-flow="f-eval"><span class="n">④</span>评估与消融</button>
+  </div>
+
+  <!-- ① SFT -->
+  <div class="flow-body on" id="f-sft">
+    <div class="steps">
+      <div class="step"><div class="rail"><div class="bullet">1</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">取 SFT 数据</div>
+          <div class="sd"><code>toy_dataset.get_sft_pairs(include_eval=False)</code> → 18 条
+            <span class="shape">(prompt, response)</span> 文本对。</div>
+          <div class="sd">刻意<b>同时混入好回答与坏回答</b>，让 SFT 后 p(正向词) ≈ 0.5 —— 这样 PPO 才有对齐空间。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">2</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">编码并追加 <code>&lt;eos&gt;</code></div>
+          <div class="sd"><code>tok.encode(response, add_eos=True)</code> → 回答末尾多一个 EOS token，模型才有机会学会"说完就停"。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">3</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">补齐成批</div>
+          <div class="sd"><code>tok.pad_batch()</code> → <span class="shape">input_ids [B,T]</span>
+            <span class="shape">attention_mask [B,T]</span>
+            <span class="shape w">loss_mask [B,T]</span></div>
+          <div class="sd"><b>loss_mask 在 prompt 段为 0、回答段为 1</b>：我们只训练"怎么答"，不训练"怎么背题"。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">4</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">前向</div>
+          <div class="sd"><code>policy(input_ids)</code> → <span class="shape">logits [B,T,V]</span>（V = 词表大小 = 36）</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">5</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">移位对齐（因果语言模型的约定）</div>
+          <div class="sd">位置 <code>t</code> 的 logits 用来预测 token <code>t+1</code>：
+            <span class="shape">logp[:, :-1, :]</span> 对 <span class="shape">input_ids[:, 1:]</span></div>
+          <div class="formula">token_logp = logp[:, :-1, :].gather(-1, input_ids[:, 1:].unsqueeze(-1))
+loss = -(token_logp * loss_mask[:, 1:]).sum() / mask.sum()</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">6</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">反向传播并保存</div>
+          <div class="sd">Adam(lr=3e-3) × 200 epoch → loss 收敛到 <b>0.1132</b>
+            （已接近理论下界 ln2/平均长度 ≈ 0.06~0.11）→ <code>checkpoints/sft_policy.pt</code></div>
+        </div></div>
+    </div>
+  </div>
+
+  <!-- ② 奖励模型 -->
+  <div class="flow-body" id="f-rm">
+    <div class="steps">
+      <div class="step"><div class="rail"><div class="bullet">1</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">取偏好对</div>
+          <div class="sd"><code>get_preference_pairs(include_eval=False)</code> → <b>36 对</b>。
+            每对含 <span class="shape">prompt</span> <span class="shape g">chosen</span> <span class="shape w">rejected</span></div>
+          <div class="sd">9 个训练概念 × 4 条负例（1 条真实负例 + 3 条<b>困难负例</b>：只吐正向词 / 形容词×3 / 概念词×3）。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">2</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">拼成完整序列</div>
+          <div class="sd"><code>encode_pair()</code> = <code>encode(prompt) + encode(response, add_eos=True)</code></div>
+          <div class="sd">奖励模型看的是"问题 + 回答"整体。序列形态必须与 SFT / PPO 阶段一致，否则会"水土不服"。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">3</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">补齐并打分</div>
+          <div class="sd"><span class="shape">c_ids [B,T]</span> <span class="shape">c_mask [B,T]</span> →
+            <code>rm(c_ids, c_mask)</code> → <span class="shape v">r_chosen [B]</span></div>
+          <div class="sd"><span class="shape">r_ids [B,T]</span> <span class="shape">r_mask [B,T]</span> →
+            <code>rm(r_ids, r_mask)</code> → <span class="shape v">r_rejected [B]</span></div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">4</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">Bradley-Terry 偏好损失</div>
+          <div class="formula">L = -log σ(r_chosen - r_rejected)</div>
+          <div class="sd">不学"打几分"，只学"这两个里人类更喜欢哪个"。这正是 InstructGPT / Claude 用的同一条损失。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">5</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">验证 + 存最佳权重</div>
+          <div class="sd">每 40 epoch 在 <b>eval 概念</b>的偏好对上算 <code>val_acc</code> / <code>val_loss</code>。</div>
+          <div class="sd">选取规则：<b>准确率优先，准确率并列时取验证损失更低的</b>。
+            只写 <code>val_acc &gt; best</code> 有个隐蔽 bug —— 本任务 val_acc 第 1 个 epoch 就冲到 1.000 并保持，
+            于是永远不更新，最终保存的反而是<b>欠训练</b>的第 1 轮权重（chosen/rejected 只差 ±0.9）。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">6</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">保存</div>
+          <div class="sd">→ <code>checkpoints/reward_model.pt</code>（验证准确率 1.000，困难负例被打到 −28.6，与好回答拉开 20 分以上）</div>
+        </div></div>
+    </div>
+  </div>
+
+  <!-- ③ PPO -->
+  <div class="flow-body" id="f-ppo">
+    <div class="callout b" style="margin-bottom:14px">
+      <span class="t">PPO 一轮迭代 = 采集（不建图）+ 更新（建图）两段</span>
+      前 9 步在 <code>@torch.no_grad()</code> 下跑，只算数值；第 10 步才真正建计算图并反传。
+      梯度<b>只</b>在第 10 步对策略参数求一次。
+    </div>
+    <div class="steps">
+      <div class="step"><div class="rail"><div class="bullet">1</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">按长度分桶取 prompt</div>
+          <div class="sd"><code>make_prompt_batches()</code> → <span class="shape">prompt_ids [B,P]</span>（同批等长，省去 padding）</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">2</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">用旧策略采样回答（变长）</div>
+          <div class="sd"><code>policy.generate(prompt_ids, max_new_tokens, eos_id)</code></div>
+          <div class="sd"><span class="shape">sequences [B,P+L]</span>
+            <span class="shape">valid_mask [B,L]</span>
+            <span class="shape">log_probs [B,L]</span>
+            <span class="shape g">lengths [B]</span></div>
+          <div class="sd">遇到 <code>&lt;eos&gt;</code> 逐序列提前停止，所以 L 是"最长的那条"，短序列后面是填充位。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">3</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">重算旧策略的 log π（<span style="color:var(--warn)">关键坑</span>）</div>
+          <div class="sd"><code>policy.completion_log_probs(sequences, P)</code> → <span class="shape">old_logprobs [B,L]</span></div>
+          <div class="sd"><b>为什么不直接用 <code>generate</code> 返回的？</b>已结束的序列后面还会继续"采样"出垃圾 token，
+            <code>generate</code> 把它们记成 0；而更新阶段重新前向会得到这些垃圾 token 的<b>真实</b> log π。
+            两边不一致 → <code>ratio = exp(new − old)</code> 直接爆 <code>inf</code>。统一重算一次才对齐。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">4</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">参考模型打分</div>
+          <div class="sd"><code>ref_model.completion_log_probs(...)</code> → <span class="shape v">ref_logprobs [B,L]</span>
+            （参考模型是 SFT 策略的冻结 deepcopy）</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">5</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">奖励模型打分</div>
+          <div class="sd"><span class="shape">attention_mask [B, P+L] = [1…1 | valid_mask]</span> →
+            <code>reward_model(full_ids, attn)</code> → <span class="shape v">rewards [B]</span>（原始分）</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">6</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">奖励归一化</div>
+          <div class="sd"><code>normalizer(rewards)</code> → <span class="shape v">normalized_rewards [B]</span>
+            （用跨迭代的 Welford 滑动统计量，再 clip ±5）</div>
+          <div class="sd"><code>rollout.rewards</code> 保留<b>原始分</b>用于上报，<code>rollout.normalized_rewards</code> 才进入训练。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">7</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">奖励塑形：KL 惩罚 + 任务奖励落点</div>
+          <div class="formula">token_rewards = -β · (old_logprobs - ref_logprobs)        # 逐 token
+token_rewards[i, lengths[i]-1] += normalized_rewards[i]   # 落在各自最后一个有效位</div>
+          <div class="sd">KL 惩罚是<b>逐 token</b>的，任务奖励是<b>序列级</b>的 —— 只在每条序列自己的结尾加一次。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">8</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">价值估计</div>
+          <div class="sd"><code>policy.value(full_ids)[:, P-1:-1]</code> → <span class="shape v">values [B,L]</span>
+            （同样按"预测位偏移"对齐）</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">9</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">GAE 优势估计（变长特化）</div>
+          <div class="formula">δ_t = r_t + γ·V_{t+1} − V_t
+A_t = δ_t + γ·λ·A_{t+1}
+next_value = values[t+1] * mask[t+1]          # 技巧 1：序列末尾自动归零
+last_gae   = (δ + γλ·last_gae) * mask[t]      # 技巧 2：填充区垃圾优势不倒流</div>
+          <div class="sd">→ <span class="shape">advantages [B,L]</span> <span class="shape">returns [B,L]</span></div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">10</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">PPO 更新（这一步建图）</div>
+          <div class="sd">优势标准化（<b>之后必须重新乘 mask</b>）→ 打乱 → 切 minibatch →
+            <code>new_logprobs</code> / <code>new_values</code> → <code>ratio = exp(new − old)</code></div>
+          <div class="formula">surr1 = ratio · A
+surr2 = clip(ratio, 1−ε, 1+ε) · A
+loss  = −min(surr1, surr2) + vf_coef · (V_new − R)² − ent_coef · H(π)
+loss  = (loss · mask).sum() / mask.sum()</div>
+          <div class="sd">反向传播 → <code>clip_grad_norm_(max_grad_norm=1.0)</code> → Adam(lr=3e-4) 走一步。</div>
+        </div></div>
+    </div>
+  </div>
+
+  <!-- ④ 评估与消融 -->
+  <div class="flow-body" id="f-eval">
+    <div class="steps">
+      <div class="step"><div class="rail"><div class="bullet">1</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st"><code>evaluate.py</code>：对每个 prompt 重复采样</div>
+          <div class="sd">每个 prompt 复制 <b>8 份</b>一次性生成 → <span class="shape">full_ids [8n, P+L]</span>。
+            生成是随机的，只采一次噪声极大 —— <b>重复采样求平均是 RL 实验的基本功</b>。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">2</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">算三个量</div>
+          <div class="sd"><span class="shape v">平均奖励</span>（原始分，不归一化，否则跨实验没法比）</div>
+          <div class="sd"><span class="shape">平均 KL</span>：<code>KL ≈ E[log π − log π_ref]</code>，<b>只在有效 token 上平均</b></div>
+          <div class="sd"><span class="shape g">任务级质量</span>：把全部生成文本交给 <code>task_quality()</code></div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">3</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">任务级质量：一把与奖励模型无关的尺子</div>
+          <div class="sd">三个判据只依赖数据集自身定义，<b>完全不经过奖励模型</b>：</div>
+          <div class="sd">· <b>含正向词</b>：出现 harmful / deceptive / malicious / dangerous 之一</div>
+          <div class="sd">· <b>概念词正确</b>：出现 prompt 末尾那个概念词（如 worm）</div>
+          <div class="sd">· <b>成句</b>：长度在 4~7 个 token（没提前闭嘴、也没硬撑到上限）</div>
+          <div class="sd" style="margin-top:8px">为什么必须另找尺子？因为<b>"奖励涨了多少"本身会被 reward hacking 污染</b> ——
+            策略学会钻空子时，奖励照样涨。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">4</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st"><code>ablation_kl.py</code>：配对比较</div>
+          <div class="sd">每个 trial 先 <code>set_seed(42)</code>、从同一个 SFT checkpoint 出发、<b>新建归一化器</b>（统计量不能跨 trial 复用）。</div>
+          <div class="sd">这样曲线上的差异就是 β 的<b>因果效应</b>，而不是随机波动。</div>
+        </div></div>
+      <div class="step"><div class="rail"><div class="bullet">5</div><div class="line"></div></div>
+        <div class="step-body">
+          <div class="st">输出</div>
+          <div class="sd">终端表格 + 两组字符条形图 + <code>ablation_kl_results.md</code>，<b>零第三方依赖（不需要 matplotlib）</b>。</div>
+        </div></div>
+    </div>
+  </div>
+
+  <h3 style="margin:30px 0 12px;font-size:16px">张量形状速查</h3>
+  <div class="tbl-scroll">
+    <table class="tb">
+      <thead><tr><th>符号</th><th>含义</th><th>典型值</th><th>出现在</th></tr></thead>
+      <tbody>
+        <tr><td class="mono strong">B</td><td>batch 大小</td><td class="mono">4 ~ 9</td><td>全部阶段</td></tr>
+        <tr><td class="mono strong">P</td><td>prompt 的 token 数（同批等长）</td><td class="mono">3 ~ 5</td><td>PPO / 评估</td></tr>
+        <tr><td class="mono strong">L</td><td>回答的最大有效 token 数（含 EOS）</td><td class="mono">≤ 8</td><td>PPO / 评估</td></tr>
+        <tr><td class="mono strong">T</td><td>序列总长 = P + L</td><td class="mono">≤ 13</td><td>全部阶段</td></tr>
+        <tr><td class="mono strong">V</td><td>词表大小</td><td class="mono">36</td><td>SFT / PPO 更新</td></tr>
+        <tr><td class="mono strong">valid_mask</td><td>[B,L]，1=有效回答 token，0=该序列结束后的填充位</td><td class="mono">0/1</td><td>PPO / 评估</td></tr>
+        <tr><td class="mono strong">lengths</td><td>[B]，每条回答的有效长度</td><td class="mono">4 ~ 7</td><td>PPO 奖励落点</td></tr>
+        <tr><td class="mono strong">ratio</td><td>[B,L]，<code>exp(logπ_new − logπ_old)</code></td><td class="mono">≈1</td><td><code>ppo_update</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= §5 设计取舍 ================= -->
+<section class="sec wrap" id="decisions">
+  <div class="sec-head">
+    <span class="sec-kicker">05 / Trade-offs</span>
+    <h2><span class="num">§5</span>关键设计决策与取舍</h2>
+    <p class="sec-sub">
+      每一个"这样写"背后都有一个"所以放弃了那样"。这张表是本项目的核心：<b>动机</b>说明为什么，
+      <b>牺牲</b>说明代价在哪。
+    </p>
+  </div>
+  <div class="sec-rule"></div>
+  <div class="tbl-scroll">
+    <table class="tb">
+      <thead><tr><th style="width:22%">设计选择</th><th style="width:44%">动机</th><th>牺牲了什么</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="strong">默认 Transformer，保留 LSTM</td>
+          <td>贴近工业界，长程依赖更好；LSTM 作为一行开关的对照实验</td>
+          <td>参数量约为 LSTM 的 4 倍，CPU 全流程从 ≈1 分钟变 ≈2 分钟</td>
+        </tr>
+        <tr>
+          <td class="strong">微型 Transformer，而非直接用 GPT-2</td>
+          <td>完全可读（≈200 行）、零外部依赖、CPU 可训</td>
+          <td>容量有限，"概念词绑定"仍学不会（但实测证明这是数据问题而非容量问题）</td>
+        </tr>
+        <tr>
+          <td class="strong">KV cache 增量解码</td>
+          <td>生成单步从 O(L²) 降到 O(L)，也是工业实现的标准做法</td>
+          <td>多一份 <code>past_kv</code> 状态要维护；因果掩码必须改用<b>绝对位置</b>比较</td>
+        </tr>
+        <tr>
+          <td class="strong">pre-LN + 残差缩放</td>
+          <td>小模型 + 较大学习率下训练更稳</td>
+          <td>pre-LN 也不是"学习率随便调"：<code>sft_lr</code> 必须从 5e-3 降到 3e-3</td>
+        </tr>
+        <tr>
+          <td class="strong">空格分词而非 BPE</td>
+          <td>分词不是 RLHF 重点，避免喧宾夺主</td>
+          <td>词表无法泛化到新词，OOV 只能落到 <code>&lt;unk&gt;</code></td>
+        </tr>
+        <tr>
+          <td class="strong">EOS + 变长生成</td>
+          <td>让模型学会"何时停"，消除末尾重复，也让 mask 机制真正被用上</td>
+          <td>引入 padding / masking 复杂度；GAE 终止判断必须按每条序列各自的有效长度处理</td>
+        </tr>
+        <tr>
+          <td class="strong">奖励读出用 <code>mean</code> 而非 <code>last</code></td>
+          <td>堵死"不吐 <code>&lt;eos&gt;</code> 就骗高分"的捷径（Hack ①）</td>
+          <td>与部分工业实现的 <code>last</code> 约定不同；<code>last</code> 保留为一行开关以便复现该漏洞</td>
+        </tr>
+        <tr>
+          <td class="strong">偏好数据加"困难负例"</td>
+          <td>堵死"只吐一个正向词"的捷径（Hack ②）</td>
+          <td>偏好对从 9 对膨胀到 36 对；数据构造不再"纯净"</td>
+        </tr>
+        <tr>
+          <td class="strong">KL 写进奖励，而非写进损失</td>
+          <td>与 InstructGPT / TRL 一致，语义直观："偏离就扣分"</td>
+          <td>需要正确对齐 value / logprob 的时序（预测位偏移差一位就全错）</td>
+        </tr>
+        <tr>
+          <td class="strong">奖励用滑动统计量归一化</td>
+          <td>让奖励尺度与超参解耦，<code>kl_coef</code> 在不同奖励模型之间可移植</td>
+          <td>训练早期统计量不准，会引入一小段"校准期"；且<b>仍不能跨骨干对齐</b></td>
+        </tr>
+        <tr>
+          <td class="strong">优势做 batch 标准化</td>
+          <td>显著稳定训练，工业界标配</td>
+          <td>小 batch 时统计量噪声大；标准化后必须重新乘 mask</td>
+        </tr>
+        <tr>
+          <td class="strong"><code>ppo_epochs = 1</code></td>
+          <td>本任务奖励模型只有 36 对数据、比较弱，复用 4 轮会迅速把策略推出安全区</td>
+          <td>放弃了 PPO 的样本效率优势（奖励模型可靠时调大才是净收益）</td>
+        </tr>
+        <tr>
+          <td class="strong">价值头复用同一骨干</td>
+          <td>省一套参数；也说明"奖励模型和 critic 本质是同一种东西"</td>
+          <td>critic 与 policy 共享表征，可能相互干扰</td>
+        </tr>
+        <tr>
+          <td class="strong"><code>gamma = 1.0</code></td>
+          <td>RLHF 的标准做法（不做时间折扣）</td>
+          <td>不适合有明确回合终止的经典 RL 任务</td>
+        </tr>
+        <tr>
+          <td class="strong">所有超参集中在 <code>config.py</code></td>
+          <td>一处修改、便于复现实验</td>
+          <td>文件略长</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid g2" style="margin-top:18px">
+    <div class="callout w">
+      <span class="t">两个刻意的教学设计</span>
+      <b>①</b> SFT 数据里同时放好回答和坏回答 —— 让 PPO 有真实的"对齐空间"，否则 SFT 一步到位，PPO 的效果根本看不出来。<br>
+      <b>②</b> 把三个 reward hacking 完整保留在文档里 —— 它们都是真实调试中撞出来的，比"一次跑通"更能说明 RLHF 难在哪。
+      相关开关（<code>rm_pooling="last"</code>、<code>include_hard_negatives=False</code>、<code>sft_lr=5e-3</code>）都留着，可以亲手复现每一个。
+    </div>
+    <div class="callout">
+      <span class="t">架构上的一个"非典型"选择</span>
+      多数教学实现会把"采样 → 算 log π → 算 KL → 算优势 → 更新"写成一个大函数。
+      本项目把<b>采集</b>（<code>collect_rollout</code>，no_grad）与<b>更新</b>（<code>ppo_update</code>，建图）
+      拆成两个函数，中间用一个 <code>@dataclass Rollout</code> 传数据。
+      代价是多写了一个数据类；收益是<b>"哪一步建图、哪一步不建图"变得一目了然</b>，
+      而且 <code>ablation_kl.py</code> 可以直接复用采集结果做统计。
+    </div>
+  </div>
+</section>
+
+<!-- ================= §6 知识清单 ================= -->
+<section class="sec wrap" id="knowledge">
+  <div class="sec-head">
+    <span class="sec-kicker">06 / Knowledge Map</span>
+    <h2><span class="num">§6</span>掌握本项目所需的知识清单</h2>
+    <p class="sec-sub">
+      按主题分为 7 类，每项标注优先级（<b>P0 必先掌握</b> / P1 重要 / P2 拓展）。
+      可筛选、可搜索、可勾选进度（保存在本地）。
+    </p>
+  </div>
+  <div class="sec-rule"></div>
+
+  <div class="k-toolbar">
+    <span class="lbl">分类</span>
+    <span id="catFilters"></span>
+  </div>
+  <div class="k-toolbar">
+    <span class="lbl">优先级</span>
+    <button class="fchip on" data-pri="ALL">全部</button>
+    <button class="fchip" data-pri="P0">P0 核心</button>
+    <button class="fchip" data-pri="P1">P1 重要</button>
+    <button class="fchip" data-pri="P2">P2 拓展</button>
+    <input class="search" id="kSearch" type="search" placeholder="搜索知识点…">
+    <button class="fchip" id="kHideDone">隐藏已掌握</button>
+    <div class="k-progress">
+      <span id="kProgTxt">0 / 0</span>
+      <span class="k-bar"><i id="kProgBar"></i></span>
+      <button class="fchip" id="kReset" title="清空勾选">重置</button>
+    </div>
+  </div>
+
+  <div id="kList"></div>
+
+  <h3 style="margin:30px 0 13px;font-size:16px">推荐学习路径</h3>
+  <div class="path">
+    <div class="phase">
+      <div class="ph-l"><b>阶段 0</b><span>1 ~ 2 天</span></div>
+      <div class="ph-r"><b>先跑起来，再看代码。</b>
+        按 README 快速开始跑完 <code>train_sft → train_reward_model → train_ppo → evaluate</code>，
+        观察每一步打印的数字与样例回答。然后读 <code>config.py</code>（所有旋钮）、
+        <code>utils.py</code>、<code>tokenizer.py</code>（最容易懂的三个文件），
+        建立"三阶段流水线"的整体印象。<b>不要一开始就啃 <code>ppo.py</code>。</b></div>
+    </div>
+    <div class="phase">
+      <div class="ph-l"><b>阶段 1</b><span>3 ~ 5 天</span></div>
+      <div class="ph-r"><b>深度学习与语言模型基础（A + B 类）。</b>
+        重点是 A2 自动微分、A3 交叉熵、B1 自回归约定、B4 因果掩码、B5 残差与 LayerNorm。
+        配套读 <code>mini_lm.py</code>（40 行，最容易懂的骨干）→ 再读 <code>mini_transformer.py</code>。
+        读完 B 类你应该能自己写出 <code>completion_logits</code> 的切片。</div>
+    </div>
+    <div class="phase">
+      <div class="ph-l"><b>阶段 2</b><span>3 ~ 5 天</span></div>
+      <div class="ph-r"><b>强化学习基础（C 类）。</b>
+        建议顺序：C1 MDP → C2/C3 策略梯度 → C4 基线 → C7 GAE → C8/C9 裁剪。
+        配套读 <code>reinforce.py</code>（40 行，只有三行是核心）→ 再读 <code>ppo.py</code>。
+        <b>看到 <code>ratio = exp(new − old)</code> 时应该能自己解释为什么要 exp。</b></div>
+    </div>
+    <div class="phase">
+      <div class="ph-l"><b>阶段 3</b><span>2 ~ 3 天</span></div>
+      <div class="ph-r"><b>RLHF 专项（D 类）。</b>
+        重点是 D2 Bradley-Terry、D3 参考模型与 KL、<b>D4 reward hacking（三种具体形态）</b>、D9 评测独立性。
+        配套读 <code>preference_loss.py</code> → <code>reference_model.py</code> → <code>train_reward_model.py</code>。
+        这一阶段的核心收获是：<b>奖励模型是代理，代理一定会被钻空子。</b></div>
+    </div>
+    <div class="phase">
+      <div class="ph-l"><b>阶段 4</b><span>2 ~ 3 天</span></div>
+      <div class="ph-r"><b>工程与实验方法（E + F 类）。</b>
+        重点 E3（采样不可导、必须重算 log π）、E4（mask 的四种用法）、
+        F2（配对比较）、F3（多次采样降噪）、F6（不要只看单一指标）。
+        配套跑一次 <code>ablation_kl.py</code>，亲手看一遍"奖励提升高但成句率 0%"的 reward hacking 现场。</div>
+    </div>
+    <div class="phase">
+      <div class="ph-l"><b>阶段 5</b><span>持续</span></div>
+      <div class="ph-r"><b>踩坑清单（G 类）+ 动手扩展。</b>
+        这 7 条都是本项目真实踩过的坑，每条都对应一次"训练崩掉"。
+        然后按 §7 的流程做一次扩展（推荐从"新增一个骨干"或"新增一个任务级质量判据"开始）。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §7 拓展流程 ================= -->
+<section class="sec wrap" id="extend">
+  <div class="sec-head">
+    <span class="sec-kicker">07 / Extension Playbook</span>
+    <h2><span class="num">§7</span>拓展本项目的实践流程</h2>
+    <p class="sec-sub">
+      五个最常见的扩展场景，每个都给出可照做的步骤。展开查看，特别注意黄框里的<b>关键细节</b>——
+      它们都是踩过坑才总结出来的。
+    </p>
+  </div>
+  <div class="sec-rule"></div>
+
+  <div class="acc open">
+    <button class="acc-h">
+      <span class="ic">🧱</span>
+      <span class="tx"><span class="tt">场景 A：新增一个骨干（如 GRU / 更深的 Transformer）</span>
+        <span class="ts">改动量：新增 1 个文件 + 改 2 处配置 · 推荐作为第一个练习</span></span>
+      <span class="ar">▶</span>
+    </button>
+    <div class="acc-b">
+      <ol class="ol">
+        <li>新建 <code>mini_gru.py</code>，实现一个类，<b>暴露与 <code>MiniTransformer</code> 完全相同的 5 个方法</b>：
+          <code>forward(x)</code>、<code>value(x)</code>、<code>completion_logits(ids, P)</code>、
+          <code>completion_log_probs(ids, P)</code>、<code>generate(prompt, n, T, eos_id)</code>。</li>
+        <li>在 <code>models.py</code> 里把 <code>"gru"</code> 加进 <code>ARCHS</code>，
+          并在 <code>build_backbone</code> / <code>build_reward_model</code> 里各加一个分支。</li>
+        <li>在 <code>config.py</code> 里加这个骨干自己的超参（如 <code>gru_hidden</code>），
+          与现有的 <code>embed_dim</code>/<code>d_model</code> 分开，避免语义混淆。</li>
+        <li>改 <code>CFG.arch = "gru"</code>，<b>重新依次运行</b>
+          <code>train_sft.py</code> → <code>train_reward_model.py</code> → <code>train_ppo.py</code> → <code>evaluate.py</code>。</li>
+        <li>写一段临时脚本做两个数值自检：<b>增量解码 ≡ 整段前向</b>、<b>因果性（未来 token 的梯度为 0）</b>。
+          验证通过后删掉临时脚本。</li>
+        <li>对照实验：用同一套超参各跑一遍 Transformer / LSTM / 新骨干，
+          比较 <code>evaluate.py</code> 的<b>任务级质量</b>（不要比奖励绝对值）。</li>
+      </ol>
+      <div class="kd-box">
+        <div class="h">⚠️ 关键细节</div>
+        <ul>
+          <li><code>generate()</code> 必须返回 <code>valid_mask [B,L]</code> 与 <code>lengths [B]</code> ——
+            整条变长链路（奖励落点、GAE 终止、KL 统计）都依赖它们，缺一个就会静默算错。</li>
+          <li><code>completion_logits</code> 的切片必须是 <code>[:, P-1 : T-1, :]</code>。
+            写成 <code>[:, P:, :]</code> 会整体错一位，训练照样跑但永远学不会。</li>
+          <li><code>value()</code> 只在 <code>with_value_head=True</code> 时存在；
+            SFT / 参考模型 / 奖励模型不需要它。</li>
+          <li><b>换骨干必须重跑 SFT 和奖励模型</b>：两个骨干权重结构不同，
+            <code>train_ppo.py</code> 里有一道显式校验（只允许缺 <code>value_head.*</code>）会挡住混用。</li>
+          <li>如果新骨干是 Transformer 类，记得同时处理 <b>KV cache</b>，
+            否则生成会退化成 O(L²) 的整段重算。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="acc">
+    <button class="acc-h">
+      <span class="ic">🎯</span>
+      <span class="tx"><span class="tt">场景 B：新增一个算法（如 DPO / GRPO）</span>
+        <span class="ts">改动量：新增 1 个算法文件 + 1 个训练脚本</span></span>
+      <span class="ar">▶</span>
+    </button>
+    <div class="acc-b">
+      <ol class="ol">
+        <li>新建 <code>dpo.py</code>，<b>只 import <code>torch</code></b>（保持 <code>ppo.py</code> 那种"算法层零项目内依赖"的风格）。</li>
+        <li>算法通过"鸭子类型"使用模型：需要 <code>completion_log_probs()</code> 就调它，不 import 任何模型类。</li>
+        <li>新建 <code>train_dpo.py</code>：复用 <code>train_ppo.py</code> 的 <code>make_prompt_batches</code>
+          与 <code>evaluate_policy</code>，只替换训练循环本体。</li>
+        <li>在 <code>config.py</code> 加算法超参（DPO 是 <code>dpo_beta</code>，GRPO 是 <code>group_size</code>），
+          与 PPO 的超参分区存放。</li>
+        <li>存成独立文件 <code>checkpoints/dpo_policy.pt</code>，<b>不要覆盖 PPO 的结果</b>
+          （<code>train_reinforce.py</code> 就是这么做的）。</li>
+        <li>用 <code>evaluate.py</code> 的任务级质量做三方对照：SFT / PPO / DPO。</li>
+      </ol>
+      <div class="kd-box">
+        <div class="h">⚠️ 关键细节</div>
+        <ul>
+          <li><b>DPO 不需要奖励模型，也不需要参考模型的前向</b> ——
+            但需要参考模型的 <code>log π_ref</code>。参考模型仍然要建，只是不参与梯度。</li>
+          <li>DPO 直接在<b>偏好对</b>上训练，所以它天然绕开了 reward hacking；
+            代价是失去了"在线采样"的能力。</li>
+          <li>如果新算法需要新的中间量（如 GRPO 的组内相对优势），
+            建议同样定义一个 <code>@dataclass</code> 承载它，保持"采集 / 更新"分离的清晰度。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="acc">
+    <button class="acc-h">
+      <span class="ic">⚖️</span>
+      <span class="tx"><span class="tt">场景 C：新增奖励信号（如长度惩罚、多目标奖励）</span>
+        <span class="ts">改动量：小，但最容易引入新的 reward hacking</span></span>
+      <span class="ar">▶</span>
+    </button>
+    <div class="acc-b">
+      <ol class="ol">
+        <li>确定新奖励的落点：是<b>序列级</b>（加在 <code>token_rewards[i, len_i-1]</code>）
+          还是<b>逐 token</b>（像 KL 惩罚那样直接加在 <code>token_rewards</code> 上）。</li>
+        <li>在 <code>ppo.collect_rollout</code> 的奖励塑形段加入新项，注意<b>先归一化再组合</b>，
+          否则不同量纲的奖励会互相淹没。</li>
+        <li>在 <code>toy_dataset.task_quality()</code> 里加一条对应的<b>任务级判据</b>。</li>
+        <li>跑 <code>ablation_kl.py</code> 或临时脚本，对比"加了 vs 没加"的质量指标。</li>
+      </ol>
+      <div class="kd-box">
+        <div class="h">⚠️ 关键细节</div>
+        <ul>
+          <li><b>任何新奖励信号都必须配一把独立的尺子。</b>
+            否则你无法判断策略是在"真的变好"还是在"钻新空子"。</li>
+          <li>长度惩罚的经典坑：惩罚"长度"本身会让模型<b>提前闭嘴</b>（输出过短、语义不全）。
+            更稳的做法是惩罚"超出合理区间的部分"（如 <code>max(0, len − 7)</code>）。</li>
+          <li>多目标奖励要控制量纲：先各自归一化，再加权求和；
+            否则权重会变成"哪个奖励数值大就听哪个"。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="acc">
+    <button class="acc-h">
+      <span class="ic">📊</span>
+      <span class="tx"><span class="tt">场景 D：把消融推广到其它超参</span>
+        <span class="ts">改动量：极小 · 直接改 <code>ablation_kl.py</code> 的骨架</span></span>
+      <span class="ar">▶</span>
+    </button>
+    <div class="acc-b">
+      <ol class="ol">
+        <li>把 <code>run_trial</code> 里的 <code>replace(base_cfg, kl_coef=kl_coef)</code>
+          换成目标参数，例如 <code>replace(base_cfg, ppo_lr=lr)</code>。</li>
+        <li>把 <code>--kl</code> 参数改名并调整默认网格（学习率建议扫对数刻度）。</li>
+        <li>保留"配对比较"的三要素：<b>同种子</b>、<b>同起点 checkpoint</b>、<b>新建归一化器</b>。</li>
+        <li>更彻底的方案：做成通用的 <code>--param name --values ...</code>，用 <code>setattr</code> 动态改配置。</li>
+      </ol>
+      <div class="kd-box">
+        <div class="h">⚠️ 关键细节</div>
+        <ul>
+          <li>评估集只有 3 个 prompt，"奖励提升"这一列的<b>噪声很大</b>；
+            趋势判断应以 <b>KL 两列 + 任务级质量两列</b>为主。</li>
+          <li><code>kl_max</code> 这类"最坏值"指标容易被单次尖峰影响，不要作为唯一依据。</li>
+          <li>扫参时把 <code>--n-samples</code> 调大（默认 32）能显著降低噪声。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="acc">
+    <button class="acc-h">
+      <span class="ic">🔬</span>
+      <span class="tx"><span class="tt">场景 E：新增一个任务级质量判据</span>
+        <span class="ts">改动量：极小 · 但这是最"值"的改动</span></span>
+      <span class="ar">▶</span>
+    </button>
+    <div class="acc-b">
+      <ol class="ol">
+        <li>在 <code>toy_dataset.task_quality()</code> 里加一个计数变量与判据，
+          返回元组多一项（记得同步更新 <code>evaluate.py</code> / <code>ablation_kl.py</code> 的解包）。</li>
+        <li>判据必须<b>只依赖数据集自身的定义</b>，不能经过奖励模型。</li>
+        <li>在 README 的"实测结果"表里补上这一列，让每次实验都能看到它。</li>
+      </ol>
+      <div class="kd-box">
+        <div class="h">⚠️ 关键细节</div>
+        <ul>
+          <li>本项目已经有一个反例证明这类指标的价值：评估集的<b>"概念词正确率"始终是 0.0%</b>，
+            而"含正向词率"从 54% 涨到 96%。只看奖励你永远发现不了"偏好学会了、概念绑定没学会"。</li>
+          <li>判据要"抗钻空子"：例如"成句"用长度区间而不是"长度 &gt; 3"，
+            否则模型学会"多说几个词"就能骗过它。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §8 独特特性 ================= -->
+<section class="sec wrap" id="unique">
+  <div class="sec-head">
+    <span class="sec-kicker">08 / What's Different</span>
+    <h2><span class="num">§8</span>本项目算法 vs 通用方案</h2>
+    <p class="sec-sub">
+      RLHF 的实现细节在不同代码库里差异很大。这里逐条列出本项目的做法、工业界的常见做法，
+      以及<b>为什么这样取舍</b>。有争议的地方都标了说明。
+    </p>
+  </div>
+  <div class="sec-rule"></div>
+  <div class="tbl-scroll">
+    <table class="tb">
+      <thead><tr><th style="width:17%">维度</th><th style="width:26%">本项目做法</th><th style="width:26%">通用 / 工业做法</th><th>取舍说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="strong">KL 施加位置</td>
+          <td>写进<b>奖励</b>（reward shaping），交给 GAE 统一处理</td>
+          <td>两种都有：trl / InstructGPT 走奖励，部分实现走损失正则项</td>
+          <td>教学上选奖励更直观："偏离参考模型就扣分"。代价是必须把 value / logprob 的时序对齐到<b>同一个 token 位置</b>。</td>
+        </tr>
+        <tr>
+          <td class="strong">价值网络</td>
+          <td>复用策略骨干 + 一个标量头（<code>value_head</code>）</td>
+          <td>通常用独立 critic 模型</td>
+          <td>省一套参数、省内存；代价是 critic 与 policy 共享表征可能互相干扰。本项目规模小，收益 &gt; 代价。</td>
+        </tr>
+        <tr>
+          <td class="strong">奖励读出方式</td>
+          <td><b>masked mean pooling</b>（对所有有效位置求平均）</td>
+          <td>常见做法是取 <b>last token</b> 位置</td>
+          <td>这是本项目最有价值的一处"反直觉"选择：<code>last</code> 会让"是否以 <code>&lt;eos&gt;</code> 结尾"变成捷径，策略靠"永不吐 EOS"就能把垃圾回答从 −7.92 抬到 +3.33。详见 §9。</td>
+        </tr>
+        <tr>
+          <td class="strong">奖励归一化</td>
+          <td><b>跨迭代滑动统计量</b>（Welford 在线更新）+ clip ±5</td>
+          <td>部分实现用当前 batch 的均值/方差</td>
+          <td>batch 统计量会让奖励被"同批次其它样本"影响，信号不可复现。滑动统计量换来的是<b>可复现性</b>，代价是开头有一小段校准期。</td>
+        </tr>
+        <tr>
+          <td class="strong">变长 GAE</td>
+          <td>两条显式技巧：<code>next_value = V[t+1]*mask[t+1]</code> 与 <code>last_gae *= mask[t]</code></td>
+          <td>多数实现用 padding + mask，但常把终止判断写死成 <code>t == L-1</code></td>
+          <td>写死会在变长下出错（短序列的"未来"泄漏成填充位的价值）。显式 mask 化在教学上更清楚。</td>
+        </tr>
+        <tr>
+          <td class="strong">样本复用</td>
+          <td><code>ppo_epochs = 1</code>（同一批数据只复用 1 轮）</td>
+          <td>通常 4 ~ 10 轮</td>
+          <td>本项目奖励模型只有 36 对数据、比较弱。实测复用 4 轮（12 次梯度更新）会把策略迅速推离 SFT 分布并触发 reward hacking。<b>奖励模型可靠时，调大才是净收益。</b></td>
+        </tr>
+        <tr>
+          <td class="strong">骨干可切换性</td>
+          <td>工厂 + <code>config.arch</code> 一行开关，两个骨干同接口</td>
+          <td>通常把骨干写死</td>
+          <td>这是"为教学服务的架构"：只有能一行切换，才做得起"LSTM vs Transformer"的对照实验。代价是多了一层 <code>models.py</code> 抽象。</td>
+        </tr>
+        <tr>
+          <td class="strong">评测体系</td>
+          <td>奖励 + KL + <b>任务级质量</b>（含正向词 / 概念词 / 成句）</td>
+          <td>通常只看奖励（或奖励 + KL）</td>
+          <td>奖励是<b>代理指标</b>，会被 hack；而且不同奖励模型的分数量纲不可比。任务级质量是与奖励模型无关的独立尺子。</td>
+        </tr>
+        <tr>
+          <td class="strong">偏好数据构造</td>
+          <td>真实负例 + <b>程序生成的困难负例</b>（只吐正向词 / ×3 复读）</td>
+          <td>纯人工比较，不做负例工程</td>
+          <td>不加困难负例，奖励模型只会学到"有没有正向词"，策略立刻退化成"只输出一个词"。这是<b>用数据解决而非调参解决</b>的典型案例。</td>
+        </tr>
+        <tr>
+          <td class="strong">依赖与可读性</td>
+          <td>纯 <code>torch</code>，无 trl / transformers / deepspeed，无 matplotlib</td>
+          <td>依赖 trl、accelerate、deepspeed 等一整套</td>
+          <td>换来了"每个文件都能从头读到尾"；代价是无法直接用于真实大模型，需要另做适配层。</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= §9 开发历程 ================= -->
+<section class="sec wrap" id="history">
+  <div class="sec-head">
+    <span class="sec-kicker">09 / Development History</span>
+    <h2><span class="num">§9</span>完整开发历程</h2>
+    <p class="sec-sub">
+      这个项目不是"设计好再写"的，而是<b>一步步撞出来的</b>。按时间顺序记录每一轮改了什么、
+      为什么改、以及撞到了什么坑 —— 这些坑本身就是最好的教材。
+    </p>
+  </div>
+  <div class="sec-rule"></div>
+
+  <div class="tl">
+    <div class="tl-item">
+      <div class="tl-card">
+        <div class="tl-when">2026-10-09 · 第 0 轮：接手与修复</div>
+        <h4>从"跑不起来的骨架"到可运行的三阶段流水线</h4>
+        <p>接手时项目名为"最简实现"，但实际上跑不起来，也<b>从未真正训练过</b>。逐条排查出五个致命问题：</p>
+        <p>
+          <b>①</b> <code>train_reward_model.py</code> 用 <code>from data.toy_dataset import ...</code> 的包路径，
+          但文件其实平铺在根目录 → 直接 <code>ModuleNotFoundError</code>。<br>
+          <b>②</b> 奖励模型<b>没有训练</b>：只有一次前向 + 打印 loss，没有 <code>.backward()</code>、没有优化器、没有循环。<br>
+          <b>③</b> <code>ppo_step.py</code> 数学上是错的：<code>loss = -reward_model(actions).mean()</code> ——
+          损失里根本没有 <code>log π</code> 项，而 <code>multinomial</code> 采样不可导，
+          所以 <code>loss.backward()</code> 对策略的梯度<b>恒为零</b>。它连 REINFORCE 都不是。<br>
+          <b>④</b> 动作语义混乱：把"位置 × 动作"的混杂张量直接喂给奖励模型当序列。<br>
+          <b>⑤</b> 没有参考模型，README 里明写 "Placeholder values"。
+        </p>
+        <p>修复方式：删除 <code>ppo_step.py</code>，改写为 <code>reinforce.py</code>（教学阶梯②）+ <code>ppo.py</code>（教学阶梯③）；
+          新增 <code>config.py</code> / <code>utils.py</code> / <code>reference_model.py</code>；
+          重写 <code>tokenizer.py</code> 为类；把数据集扩到 9 训练概念 + 3 评估概念。</p>
+        <div class="tl-badges">
+          <span class="pill hi">新增 8 个文件</span>
+          <span class="pill g">首次跑通</span>
+          <span class="pill b">删掉数学错误的 ppo_step.py</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-card">
+        <div class="tl-when">2026-10-11 上午 · 第 1 轮：EOS 与变长生成</div>
+        <h4>让模型学会"说完就停"</h4>
+        <p>最初的版本固定生成 6 个 token，于是出现 <code>malware is harmful software software software</code> 这种末尾复读。
+          根因是模型<b>不知道话已经说完了</b>，只能一直重复到长度上限 —— 这也意味着长度本身不受策略控制。</p>
+        <p>改动：<code>generate()</code> 维护 <code>finished</code> 布尔向量，逐序列遇到 <code>&lt;eos&gt;</code> 提前停止；
+          <code>completion_mask</code> 从"全 1"变成真实掩码，于是<b>四处</b>必须跟着改：
+          奖励模型要传 <code>attention_mask</code>、任务奖励要落在各自最后一个有效位、
+          GAE 终止判断要按各自有效长度、KL 统计只在有效 token 上平均。</p>
+        <p>这一轮撞到两个坑：<b>①</b> <code>old_logprobs</code> 必须重算（否则 <code>ratio</code> 爆 <code>inf</code>）；
+          <b>②</b> 优势标准化后必须重新乘 mask（否则填充位优势被平移成非零，出现 <code>inf × 0 = nan</code>）。</p>
+        <div class="tl-badges">
+          <span class="pill hi">变长生成</span>
+          <span class="pill w">坑：old_logprobs 需重算</span>
+          <span class="pill w">坑：标准化后重乘 mask</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-card">
+        <div class="tl-when">2026-10-11 中午 · 第 2 ~ 3 轮：奖励归一化 + KL 消融</div>
+        <h4>让超参变得可移植，并把它测出来</h4>
+        <p><b>奖励归一化</b>：新增 <code>reward_normalizer.py</code>（Welford 在线均值/方差 + clip ±5）。
+          关键设计是<b>用跨迭代的滑动统计量，而不是当前 batch 的统计量</b> ——
+          后者会让奖励被"同批次其它样本"影响，同一段回答换个批次就换个分，信号不可复现。
+          归一化只作用于训练，上报指标永远用原始奖励。</p>
+        <p><b>KL 消融脚本</b>：新增 <code>ablation_kl.py</code>，一条命令扫完 <code>kl_coef</code> 网格，
+          自动输出终端表格 + 字符条形图 + Markdown 结果文件，<b>零第三方依赖</b>。
+          为了公平，每个 trial 做"配对比较"：同种子、同 SFT 起点、新建归一化器。</p>
+        <p>结果直接产出了一个新默认值：归一化改变了奖励尺度，原来的 <code>kl_coef=0.1</code> 变得偏松，
+          实测后改为 <b>0.2</b>。同时把 <code>train_ppo.py</code> 的训练循环抽成
+          <code>run_ppo_training()</code> 等可复用函数，供消融脚本与 REINFORCE 复用。</p>
+        <div class="tl-badges">
+          <span class="pill hi">奖励归一化</span>
+          <span class="pill hi">消融脚本化</span>
+          <span class="pill g">kl_coef: 0.1 → 0.2</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-card">
+        <div class="tl-when">2026-10-11 下午 · 第 4 轮：mini-Transformer 骨干</div>
+        <h4>换骨干，然后被三个 reward hacking 教做人</h4>
+        <p>新增 <code>mini_transformer.py</code>（≈200 行 decoder-only Transformer：因果掩码、KV cache 增量解码、pre-LN + 残差缩放），
+          配套新增 <code>models.py</code> 工厂实现"骨干与算法解耦"，<code>config.arch</code> 一行切换。LSTM 保留为对照。</p>
+        <p>数值验证：KV cache 逐步前向 ≡ 整段前向（最大绝对误差 ≈ 1e-7，float32 舍入级）；因果性精确为 0.0。</p>
+        <p>然后是<b>连续三次崩溃</b>，挖出三个层层嵌套的 reward hacking：</p>
+        <p>
+          <b>Hack ①「不吐 EOS 就能骗高分」</b> —— <code>rm_pooling="last"</code> 时奖励模型学到"只在 <code>&lt;eos&gt;</code> 位读分"，
+          策略只要永不吐 EOS，就能把坏回答从 −7.92 抬到 +3.33。→ 默认改 <code>mean</code>。<br>
+          <b>Hack ②「只吐一个正向词」</b> —— 奖励模型给整句 +13.9、给光秃秃一个 <code>dangerous</code> +12.3，后者只要 1 个 token。
+          策略立刻退化成单字回答，而且<b>加大 KL 惩罚也救不回来</b>。→ 加困难负例后 <code>dangerous</code> 掉到 −28.5。<br>
+          <b>Hack ③「SFT 没收敛」</b> —— 最隐蔽的一个，根因根本不在 PPO：<code>sft_lr=5e-3</code> 让 pre-LN Transformer
+          卡在 loss 0.436（LSTM 同设置能到 0.114）。→ 降到 3e-3 后收敛到 0.1132。
+        </p>
+        <p>同批还修了一个同类 bug：<code>train_reward_model.py</code> 的最佳 checkpoint 判据只比 <code>val_acc</code>，
+          而它第 1 个 epoch 就饱和到 1.000，导致保存的是<b>欠训练</b>的权重。
+          改成"准确率优先、并列时比验证损失"后，chosen/rejected 的分离度从 ±0.9 变成 ±7。</p>
+        <p>最终结论（也是本轮最大的教学收获）：
+          <b>奖励的绝对分不能跨骨干比较</b> —— LSTM 的奖励是 +6.37、Transformer 是 −1.01，
+          但按与奖励模型无关的"含正向词率"，Transformer 是 <b>95.8%</b>、LSTM 只有 75.0%。</p>
+        <div class="tl-badges">
+          <span class="pill hi">mini-Transformer</span>
+          <span class="pill hi">骨干解耦</span>
+          <span class="pill b">修掉 3 个 reward hacking</span>
+          <span class="pill g">95.8% vs 75.0%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-item now">
+      <div class="tl-card">
+        <div class="tl-when">现在 · 第 5 轮：架构可视化</div>
+        <h4>把架构本身变成可交互的教材</h4>
+        <p>项目已经有 19 个模块、3 阶段流水线、5 层架构，但这些都是"散落在 README 里的文字"。
+          这一轮把架构、调用关系、数据流、设计取舍、知识清单、开发历程做成了你现在看到的这个站点。</p>
+        <p>同时沉淀了一份"知识清单 + 学习路径"与一份"拓展实践手册"，
+          让后来者不必重复走一遍"从崩溃到修好"的全过程。</p>
+        <div class="tl-badges">
+          <span class="pill hi">架构可视化</span>
+          <span class="pill hi">知识清单</span>
+          <span class="pill hi">拓展手册</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §10 展望 ================= -->
+<section class="sec wrap" id="outlook">
+  <div class="sec-head">
+    <span class="sec-kicker">10 / Roadmap</span>
+    <h2><span class="num">§10</span>后续扩展的展望与预期</h2>
+    <p class="sec-sub">
+      按"投入产出比"排序。每项都写了<b>预期能看到什么</b>——有明确预期的改动才值得做。
+    </p>
+  </div>
+  <div class="sec-rule"></div>
+
+  <h3 style="margin:0 0 12px;font-size:15px;color:var(--ok)">🟢 低成本 · 高收益（建议优先）</h3>
+  <div class="grid g3" style="margin-bottom:26px">
+    <div class="card">
+      <span class="ico">📐</span>
+      <h3>评测更充分</h3>
+      <p>增加评估 prompt 数量、每个 prompt 采样更多次，并统计方差。</p>
+      <p style="margin-top:8px;color:var(--text-2)"><b>预期：</b>"奖励提升"这一列的噪声显著下降，
+        <code>kl_max</code> 这类最坏值指标不再被单次尖峰主导。</p>
+    </div>
+    <div class="card">
+      <span class="ico">🔁</span>
+      <h3>通用消融框架</h3>
+      <p>把 <code>ablation_kl.py</code> 改造成 <code>--param name --values ...</code> 的通用版。</p>
+      <p style="margin-top:8px;color:var(--text-2)"><b>预期：</b>扫 <code>ppo_lr</code> / <code>clip_eps</code> /
+        <code>gae_lambda</code> 只需改命令行，能快速找到本任务的稳定区间。</p>
+    </div>
+    <div class="card">
+      <span class="ico">🔬</span>
+      <h3>让"概念词绑定"也学会</h3>
+      <p>评估集"概念词正确率"始终是 0.0%，而 Transformer 与 LSTM 都一样 → <b>这是数据问题</b>。
+        可引入同一概念的多种句式或做数据增广。</p>
+      <p style="margin-top:8px;color:var(--text-2)"><b>预期：</b>若该指标能从 0% 抬起来，
+        就验证了"泛化失败源于数据而非容量"这个判断。</p>
+    </div>
+  </div>
+
+  <h3 style="margin:0 0 12px;font-size:15px;color:var(--warn)">🟡 中等成本 · 收益明显</h3>
+  <div class="grid g3" style="margin-bottom:26px">
+    <div class="card">
+      <span class="ico">🧮</span>
+      <h3>KL 的两种写法对照</h3>
+      <p>实现"KL 进奖励"与"KL 进损失"两个版本，对比数值差异。</p>
+      <p style="margin-top:8px;color:var(--text-2)"><b>预期：</b>能定量说明两者在什么条件下等价、
+        在什么条件下会分叉 —— 这是工业实现里最常见的分歧点。</p>
+    </div>
+    <div class="card">
+      <span class="ico">⚖️</span>
+      <h3>长度惩罚 / 多目标奖励</h3>
+      <p>加长度惩罚，或组合多个奖励信号，演示如何缓解 reward hacking。</p>
+      <p style="margin-top:8px;color:var(--text-2)"><b>预期：</b>消融里 β 很小时"长度顶到上限"的现象消失；
+        但要小心新的 hacking —— 惩罚过重会让模型提前闭嘴。</p>
+    </div>
+    <div class="card">
+      <span class="ico">🪜</span>
+      <h3>"教学版 PPO"：序列级奖励 + 折扣 1</h3>
+      <p>做一个简化版，让读者先在更简单的设定下理解裁剪，再进入 token 级 MDP。</p>
+      <p style="margin-top:8px;color:var(--text-2)"><b>预期：</b>把"token 级 MDP"这个最劝退的概念
+        拆成两步走，学习曲线明显变缓。</p>
+    </div>
+  </div>
+
+  <h3 style="margin:0 0 12px;font-size:15px;color:var(--bad)">🔴 高成本 · 更接近工业界</h3>
+  <div class="grid g3">
+    <div class="card">
+      <span class="ico">🤗</span>
+      <h3>接入 HuggingFace GPT-2</h3>
+      <p>把同一套 <code>ppo.py</code> 套到真实预训练模型上，并与 <code>trl</code> 的结果做对照。</p>
+      <p style="margin-top:8px;color:var(--text-2)"><b>预期：</b>由于本项目已做到"骨干可替换"，
+        这一步主要只需补一个适配 <code>GPT2LMHeadModel</code> 的骨干包装类 ——
+        这本身就是对架构解耦程度的一次检验。</p>
+    </div>
+    <div class="card">
+      <span class="ico">🎯</span>
+      <h3>DPO 对照实现</h3>
+      <p>同一份偏好数据，分别跑 PPO 和 DPO（Direct Preference Optimization）。</p>
+      <p style="margin-top:8px;color:var(--text-2)"><b>预期：</b>DPO 绕开了奖励模型与强化学习，
+        天然免疫 reward hacking，但失去在线采样的能力。对比两者非常有启发性。</p>
+    </div>
+    <div class="card">
+      <span class="ico">🚀</span>
+      <h3>分布式 / 显存优化</h3>
+      <p>LoRA 微调、梯度检查点、8-bit 优化器等工程实践。</p>
+      <p style="margin-top:8px;color:var(--text-2)"><b>预期：</b>把教学实现与生产实现之间的
+        "最后一公里"补齐 —— 但这部分会显著增加代码复杂度，
+        与"完全可读"的目标冲突，需要权衡是否放进主分支。</p>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top:26px">
+    <span class="t">一句话总结这个项目教会我们的事</span>
+    RLHF 的难点不在"把 PPO 写出来"——那是 200 行的事。真正的难点是：
+    <b>奖励模型只是一个代理，而任何代理都会被钻空子。</b>
+    本项目用三个真实的 reward hacking 案例（不吐 EOS / 只吐一个词 / SFT 没收敛）
+    证明了这一点，并给出了三条对策：<b>改数据</b>（困难负例）、
+    <b>改读出方式</b>（mean pooling）、<b>配一把独立的尺子</b>（任务级质量）。
+  </div>
+</section>
+
+<!-- ================= 页脚 ================= -->
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div>
+      <div style="font-weight:680;color:var(--text);margin-bottom:5px">🤖 RLHF Mini Pipeline</div>
+      <div>教学级 RLHF 实现 · 系统架构与核心设计 · 纯 PyTorch · CPU 可跑</div>
+      <div style="margin-top:8px;font-size:12.4px">
+        运行环境：<code>Python 3.13</code> + <code>PyTorch（CPU）</code>，无需 GPU、无外部依赖
+      </div>
+      <div style="margin-top:8px;font-size:12.4px">
+        <a href="../../" style="color:var(--muted);text-decoration:none">← 返回 frotmo 的学习笔记</a>
+      </div>
+    </div>
+    <div style="text-align:right;min-width:200px">
+      <div>模块数 <b style="color:var(--text)">19</b> · 架构层 <b style="color:var(--text)">5</b> ·
+        知识点 <b style="color:var(--text)" id="footKCount">—</b></div>
+      <div style="margin-top:6px;font-size:12.4px">全部数据来自本机 CPU 实跑（seed=42），可直接复现</div>
+    </div>
+  </div>
+</footer>
+
+<button class="to-top" id="toTop" title="回到顶部" aria-label="回到顶部">↑</button>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal" id="modal" role="dialog" aria-modal="true">
+    <button class="x" id="modalX" aria-label="关闭">✕</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+<div class="mx-tip" id="mxTip"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* =====================================================================
+   1. 数据：分层 / 模块 / 知识清单
+   ===================================================================== */
+var LAYERS = [
+  {id:'infra',  name:'基础层', en:'INFRASTRUCTURE', cls:'infra'},
+  {id:'data',   name:'数据层', en:'DATA',           cls:'data'},
+  {id:'model',  name:'模型层', en:'MODELS',         cls:'model'},
+  {id:'algo',   name:'算法层', en:'ALGORITHMS',     cls:'algo'},
+  {id:'script', name:'编排层', en:'SCRIPTS',        cls:'script'}
+];
+var LAYER_NAME = {};
+LAYERS.forEach(function(l){ LAYER_NAME[l.id] = l.name; });
+
+/* deps = 该模块 import 了项目内哪些模块（只统计项目内部依赖） */
+var MODULES = [
+  {id:'config', file:'config.py', short:'config', layer:'infra',
+   role:'全局超参集中管理，含骨干切换开关 arch',
+   funcs:['Config','CFG'],
+   detail:'所有"可以调的旋钮"放在一个 dataclass 里。做实验只改这一处，便于复现。'
+        + '分四组：通用（seed / max_new_tokens / temperature）、骨干选择（arch + 两种骨干各自的超参）、'
+        + '三个阶段各自的超参、路径。'
+        + '特别值得注意的三个值：sft_lr=3e-3（5e-3 会让 pre-LN Transformer 不收敛）、'
+        + 'ppo_epochs=1（复用 4 轮会过冲）、rm_pooling="mean"（last 会产生 EOS 捷径）。',
+   deps:[]},
+
+  {id:'utils', file:'utils.py', short:'utils', layer:'infra',
+   role:'随机种子、词表 / 模型存取、参数量统计',
+   funcs:['set_seed','ensure_dir','save_vocab','load_vocab','save_model','load_model','count_parameters'],
+   detail:'三类小工具：① set_seed 固定 python + torch 的种子，保证"同一个种子得到同一条曲线"；'
+        + '② 词表与权重的存取（词表存成人类可读的 JSON，方便直接打开看 token→id 映射）；'
+        + '③ count_parameters 打印参数量，帮初学者建立"模型多大"的直觉。',
+   deps:[]},
+
+  {id:'tokenizer', file:'tokenizer.py', short:'tokenizer', layer:'data',
+   role:'极简分词器：空格切词 + 词表映射 + 补齐',
+   funcs:['Tokenizer','build_vocab','encode','decode','pad_batch'],
+   detail:'小写化 → 去标点 → 按空格切开 → 查表。四个特殊 token 固定占 0~3：'
+        + '<pad> 补齐、<unk> 未登录词、<bos> 序列开始（本任务未用）、<eos> 序列结束。'
+        + 'decode(stop_at_eos=True) 是变长生成的关键：遇到 <eos> 就停，'
+        + '后面即使还有 padding 或垃圾 token 也不会显示出来。'
+        + 'pad_batch 同时返回 input_ids 与 attention_mask。',
+   deps:[]},
+
+  {id:'toy_dataset', file:'toy_dataset.py', short:'dataset', layer:'data',
+   role:'玩具数据集 + 困难负例 + 任务级质量指标',
+   funcs:['get_sft_pairs','get_preference_pairs','get_eval_preference_pairs','degenerate_variants','task_quality','POSITIVE_WORDS'],
+   detail:'网络安全问答，9 个训练概念 + 3 个评估概念。三个关键设计：'
+        + '① get_sft_pairs 默认同时返回好回答与坏回答（让 SFT 后 p(正)=p(负)≈0.5，给 PPO 留出对齐空间）；'
+        + '② degenerate_variants 为每个概念造三条"有正向词但不成句"的困难负例，堵死"只吐一个词"的捷径；'
+        + '③ task_quality 是与奖励模型完全无关的独立尺子（含正向词率 / 概念词率 / 成句率）。',
+   deps:[]},
+
+  {id:'mini_transformer', file:'mini_transformer.py', short:'transformer', layer:'model',
+   role:'默认骨干：≈200 行 decoder-only Transformer，KV cache 增量解码',
+   funcs:['MiniTransformer','CausalSelfAttention','Block','_trunk','generate'],
+   detail:'三层结构：token+可学习位置编码 → N 个 pre-LN Block（因果自注意力 + GELU FFN）→ LayerNorm → lm_head。'
+        + '三个实现要点：① 因果掩码用绝对位置比较（k_pos ≤ q_pos），因此有 KV cache 时也正确；'
+        + '② KV cache 让生成单步从 O(L²) 降到 O(L)；'
+        + '③ 残差分支输出投影按 1/√(2·n_layers) 缩放（GPT-2 的小技巧）。'
+        + '实测：KV cache 逐步前向与整段前向最大绝对误差 ≈1e-7；因果性精确为 0.0。',
+   deps:[]},
+
+  {id:'mini_lm', file:'mini_lm.py', short:'lstm', layer:'model',
+   role:'对照骨干：单层 LSTM（更小更快）',
+   funcs:['MiniLM'],
+   detail:'Embedding → LSTM → Linear(vocab)，约 10 万参数（Transformer 是 41 万）。'
+        + '它有两个硬伤：长程依赖弱（生成稍长就重复）、与工业界脱节。'
+        + '保留它的价值在于"一行开关就能做对照实验"。'
+        + '生成时把隐状态 (h,c) 带下去就是天然的增量解码，不需要 KV cache。',
+   deps:[]},
+
+  {id:'reward_model', file:'reward_model.py', short:'reward_model', layer:'model',
+   role:'奖励模型（两种骨干）+ 读出池化 mean / last',
+   funcs:['RewardModel','TransformerRewardModel','pool_hidden'],
+   detail:'结构与策略几乎一样，只把"输出词表分布"换成"输出一个标量"。'
+        + 'TransformerRewardModel 直接复用 MiniTransformer 的价值头 —— '
+        + '这顺带说明了一件事：奖励模型和 critic 本质上是同一种东西。'
+        + 'pool_hidden 提供两种读出方式：mean（默认，对所有有效位置求平均）与 last（取最后一个有效位）。'
+        + '实测 last 会让"是否以 <eos> 结尾"变成影响分数的捷径，策略靠永不吐 EOS 就能把坏回答从 −7.92 抬到 +3.33。',
+   deps:['mini_transformer']},
+
+  {id:'reference_model', file:'reference_model.py', short:'reference', layer:'model',
+   role:'从策略 deepcopy 一个冻结副本作为 π_ref',
+   funcs:['create_reference_model'],
+   detail:'只有 12 行，但它是 RLHF 的关键机制。copy.deepcopy 保证参数是独立副本；'
+        + 'requires_grad_(False) + eval() 双保险：既不算梯度，也关掉 dropout 等随机性。'
+        + '参考模型必须是 SFT 策略的副本 —— 如果它是随机初始化的，KL 这根"安全绳"就系错了地方。',
+   deps:[]},
+
+  {id:'models', file:'models.py', short:'models', layer:'model',
+   role:'模型工厂：按 cfg.arch 分派到具体骨干',
+   funcs:['build_backbone','build_reward_model','ARCHS'],
+   detail:'整个"骨干与算法解耦"的枢纽。所有脚本都通过它取模型，不直接 new 具体类。'
+        + '换骨干只需改 config.arch 一行，其余脚本零改动 —— 这是"依赖倒置"在教学项目里的一次小示范：'
+        + '算法依赖抽象接口，而不是具体实现。build_reward_model 还会把 cfg.rm_pooling 透传给奖励模型。',
+   deps:['mini_lm','mini_transformer','reward_model']},
+
+  {id:'preference_loss', file:'preference_loss.py', short:'pref_loss', layer:'algo',
+   role:'Bradley-Terry 偏好损失 + 偏好准确率',
+   funcs:['preference_loss','preference_accuracy'],
+   detail:'L = −log σ(r_chosen − r_rejected)，只有一行。'
+        + '奖励模型不学"这个回答打几分"，而是学"这两个里人类更喜欢哪个" —— '
+        + '这更符合人类标注的实际形态（比较比打分容易、也更稳定）。'
+        + '这正是 InstructGPT / Claude RLHF 里用的同一条损失。'
+        + 'preference_accuracy 是最直观的评估指标：1.0 表示全判对，0.5 等于瞎猜。',
+   deps:[]},
+
+  {id:'reward_normalizer', file:'reward_normalizer.py', short:'reward_norm', layer:'algo',
+   role:'Welford 在线统计 + 奖励标准化（clip ±5）',
+   funcs:['RunningMeanStd','RewardNormalizer'],
+   detail:'奖励模型输出的绝对尺度是任意的 —— 换个奖励模型，尺度就全变了，PPO 的超参因此不可移植。'
+        + '这里把奖励标准化成均值 0、方差 1。'
+        + '关键设计：用跨迭代累积的滑动统计量（Welford 增量更新），而不是当前 batch 的统计量 —— '
+        + '后者会让奖励被"同批次其它样本"影响，同一段回答换个批次就换个分。'
+        + 'Welford 的另一个好处是数值稳定且不需要保存历史数据。'
+        + '注意：这是有状态对象，每次新训练都应新建；且评估时上报的永远是原始奖励。',
+   deps:[]},
+
+  {id:'reinforce', file:'reinforce.py', short:'reinforce', layer:'algo',
+   role:'教学阶梯②：策略梯度 + batch 均值基线',
+   funcs:['reinforce_loss'],
+   detail:'核心只有三行：no_grad 下采样 → 用当前策略重算 log π（这一步才建图）→ '
+        + 'loss = −(seq_log_probs · advantage.detach()).mean()。'
+        + 'advantage 必须 detach：它只作为"权重"，梯度只能从 log π 回流到策略，'
+        + '绝不能顺着 advantage 回传到奖励模型（否则就变成在训练奖励模型了）。'
+        + '它的局限正是 PPO 要解决的问题：一条轨迹只更新一次、步长无约束、没有参考模型约束。',
+   deps:[]},
+
+  {id:'ppo', file:'ppo.py', short:'ppo', layer:'algo',
+   role:'教学阶梯③：rollout 采集 / KL 奖励塑形 / GAE / 裁剪更新',
+   funcs:['Rollout','collect_rollout','compute_gae','ppo_update'],
+   detail:'项目核心。相对 REINFORCE 多了四件东西：参考模型 KL 惩罚、价值网络 + GAE、裁剪 surrogate、多 epoch 复用。'
+        + '结构上刻意拆成两半：collect_rollout 全在 @torch.no_grad() 下跑（只算数值），'
+        + 'ppo_update 才建图并反传；中间用一个 @dataclass Rollout 传数据。'
+        + '收益是"哪一步建图、哪一步不建图"一目了然。'
+        + '注意：本文件不 import 任何项目内模块 —— 它只通过鸭子类型调用模型的五个接口。',
+   deps:[]},
+
+  {id:'train_sft', file:'train_sft.py', short:'train_sft', layer:'script',
+   role:'阶段① 监督微调：教模型"说人话"',
+   funcs:['build_tokenizer','make_sft_batch','sft_loss','main'],
+   detail:'在 (prompt → 正确回答) 上做标准因果语言模型训练，但 loss 只在回答部分计算 —— '
+        + '目标是让模型会"答"，而不是会"背题"。回答末尾追加 <eos>，这是变长生成的前提。'
+        + '收敛到 0.1132，已接近本任务的理论下界（每个概念只有一个分支点，最优 loss ≈ ln2/平均长度 ≈ 0.06~0.11）。',
+   deps:['config','models','tokenizer','toy_dataset','utils']},
+
+  {id:'train_reward_model', file:'train_reward_model.py', short:'train_rm', layer:'script',
+   role:'阶段② 奖励模型训练（含 best-checkpoint 选取）',
+   funcs:['encode_pair','make_batches','evaluate','main'],
+   detail:'真正的训练循环（原版只有一次前向、没有 backward / 优化器 / 循环）。'
+        + '用 train 概念训练、eval 概念验证，检验泛化。'
+        + '最佳权重选取规则是"准确率优先，并列时取验证损失更低的" —— '
+        + '只写 val_acc > best 会有个隐蔽 bug：本任务 val_acc 第 1 个 epoch 就冲到 1.000 并保持，'
+        + '于是永远不更新，最终保存的反而是欠训练的第 1 轮权重。',
+   deps:['config','models','preference_loss','tokenizer','toy_dataset','utils']},
+
+  {id:'train_ppo', file:'train_ppo.py', short:'train_ppo', layer:'script',
+   role:'阶段③ PPO 训练（同时是公共工具库）',
+   funcs:['make_prompt_batches','build_ppo_policy','load_reward_model','build_reward_normalizer','evaluate_policy','run_ppo_training','main'],
+   detail:'把前面所有零件串起来的地方。除了 main，它还导出了四个可复用工具，'
+        + '被 train_reinforce.py 与 ablation_kl.py 直接复用，避免复制训练代码。'
+        + 'build_ppo_policy 里有一道重要的显式校验：strict=False 加载时只允许缺失的键是 value_head.*，'
+        + '否则说明 cfg.arch 与训练 SFT 时不一致，会静默留下一堆随机初始化参数。',
+   deps:['config','models','ppo','reference_model','reward_normalizer','tokenizer','toy_dataset','utils']},
+
+  {id:'train_reinforce', file:'train_reinforce.py', short:'train_rf', layer:'script',
+   role:'对照实验：只用 REINFORCE，不用参考模型 / 裁剪 / 复用',
+   funcs:['main'],
+   detail:'故意做减法，好和 train_ppo.py 形成对照：没有参考模型 KL、没有价值网络（用 batch 均值当基线）、'
+        + '没有裁剪、没有样本复用。'
+        + '结论很反直觉：REINFORCE 的绝对奖励反而高得多（+10.4 vs PPO 的 +0.68），'
+        + '因为没有 KL 这根绳子它可以更放肆地追逐奖励模型的分数（批奖励标准差高达 5.63）。'
+        + '这正是理解 PPO 的关键：PPO 的优势不是"奖励更高"，而是"更稳、更安全"。',
+   deps:['config','models','reference_model','reinforce','tokenizer','toy_dataset','train_ppo','utils']},
+
+  {id:'evaluate', file:'evaluate.py', short:'evaluate', layer:'script',
+   role:'SFT vs PPO 对比评估 + 任务级质量',
+   funcs:['score_prompts','main'],
+   detail:'加载三个 checkpoint，在未见过的评估 prompt 上做完整对比。'
+        + '每个 prompt 重复采样 8 次再平均 —— 生成是随机的，只采一次噪声极大。'
+        + '除了奖励与 KL，它还打印一组"与奖励模型无关"的任务级质量：'
+        + '含正向词率 / 概念词正确率 / 成句率。'
+        + '为什么必须另找尺子？因为奖励模型的分只在它自己那套骨干下可比，'
+        + '而且"奖励涨了多少"本身会被 reward hacking 污染。',
+   deps:['config','models','reference_model','tokenizer','toy_dataset','utils']},
+
+  {id:'ablation_kl', file:'ablation_kl.py', short:'ablation', layer:'script',
+   role:'KL 系数消融：一条命令跑出权衡曲线',
+   funcs:['run_trial','print_report','save_markdown','main'],
+   detail:'固定其他一切、只改 β，观察"奖励提升"与"实际 KL"如何此消彼长。'
+        + '为了公平，每个 trial 做配对比较：set_seed(42) 重置、从同一个 SFT checkpoint 出发、'
+        + '新建归一化器（统计量不能跨 trial 复用）。'
+        + '输出终端表格 + 两组字符条形图 + ablation_kl_results.md，零第三方依赖（不需要 matplotlib）。'
+        + '表格特意加了"含正向词 / 成句"两列 —— 因为只看"奖励提升"会被 reward hacking 骗到：'
+        + 'β=0.05 那行奖励 +13.84 看着最漂亮，但成句率是 0.0%。',
+   deps:['config','reference_model','tokenizer','toy_dataset','train_ppo','utils']}
+];
+
+var CATS = [
+  {id:'A', name:'数学与深度学习基础',        icon:'∑',  note:'一切的地基'},
+  {id:'B', name:'语言模型与 Transformer',    icon:'🧠', note:'骨干的原理'},
+  {id:'C', name:'强化学习基础',              icon:'🎯', note:'PPO 的前置'},
+  {id:'D', name:'RLHF 专项',                 icon:'🤝', note:'本项目的主线'},
+  {id:'E', name:'PyTorch 工程实践',          icon:'🔧', note:'把想法变成代码'},
+  {id:'F', name:'实验方法学',                icon:'📊', note:'让结论可信'},
+  {id:'G', name:'本项目的"坑"清单',          icon:'⚠️', note:'真实踩过的雷'}
+];
+var CAT_NAME = {}; CATS.forEach(function(c){ CAT_NAME[c.id] = c; });
+
+var KNOW = [
+  /* --- A 数学与深度学习基础 --- */
+  {id:'A1', cat:'A', pri:'P0', t:'张量运算与广播', tags:['torch','基础'],
+   d:'理解 [B,T,V] 这类多维张量的维度含义，以及 unsqueeze / squeeze / gather / cat / repeat_interleave 的作用。项目里几乎每一步都在做形状变换，读不懂形状就读不懂代码。'},
+  {id:'A2', cat:'A', pri:'P0', t:'自动微分与计算图', tags:['autograd'],
+   d:'知道 backward() 只对 requires_grad 的张量生效；知道 no_grad 下算出的量没有梯度，必须重新前向一次才能求导。这是策略梯度实现绕弯的根源。'},
+  {id:'A3', cat:'A', pri:'P0', t:'交叉熵 / 对数似然 / log_softmax', tags:['概率'],
+   d:'SFT 的 loss 就是回答部分的逐 token 负对数似然。log_softmax + gather 是"取某个 token 的 log 概率"的标准写法，项目里出现三次（SFT / 策略梯度 / PPO 更新）。'},
+  {id:'A4', cat:'A', pri:'P0', t:'梯度下降与 Adam 优化器', tags:['优化'],
+   d:'知道学习率、梯度裁剪、optimizer.step() 三者的关系。理解为什么本项目把 sft_lr 从 5e-3 降到 3e-3 —— 学习率不是"越大越快"。'},
+  {id:'A5', cat:'A', pri:'P0', t:'概率分布与采样', tags:['概率','RL'],
+   d:'torch.multinomial 从分布里采样。采样是离散、不可导的操作 —— 这是策略梯度所有绕弯的根源：动作采样出来，但只对"这些动作的 log 概率"求梯度。'},
+  {id:'A6', cat:'A', pri:'P1', t:'均值 / 方差 / 标准差与标准化', tags:['统计'],
+   d:'奖励归一化、优势标准化都建立在这三个量上。要理解"标准化成 N(0,1)"到底改变了什么、没改变什么。'},
+  {id:'A7', cat:'A', pri:'P1', t:'数值稳定性', tags:['数值'],
+   d:'log-sum-exp、Welford 在线方差、为什么不能直接累加 sum(x²)（大数相减丢精度）。以及 clip 的必要性：一个极端值就能主导整批梯度。'},
+
+  /* --- B 语言模型与 Transformer --- */
+  {id:'B1', cat:'B', pri:'P0', t:'自回归语言模型与"位置 t 预测 t+1"约定', tags:['LM'],
+   d:'这个约定决定了所有切片都要错一位：completion_logits 必须用 [:, P-1 : T-1, :]，value 必须用 [:, P-1 : -1]。写错一位训练照样跑，但永远学不会。'},
+  {id:'B2', cat:'B', pri:'P0', t:'Embedding 与位置编码', tags:['LM'],
+   d:'token id → 向量。Transformer 需要显式位置编码（因为自注意力本身没有顺序概念），LSTM 天然有序所以不需要 —— 这是两者接口之外的一个本质差异。'},
+  {id:'B3', cat:'B', pri:'P0', t:'缩放点积注意力与多头注意力', tags:['transformer'],
+   d:'QKᵀ/√d_head 的几何含义（除以 √d 是为了防止点积随维度增大而饱和）、为什么要多头、head_dim = d_model / n_heads。'},
+  {id:'B4', cat:'B', pri:'P0', t:'因果掩码', tags:['transformer'],
+   d:'下三角掩码 vs 绝对位置比较（k_pos ≤ q_pos）。有 KV cache 时 query 只有 1 个、key 有 S 个，必须用绝对位置才能看见全部历史 key。'},
+  {id:'B5', cat:'B', pri:'P0', t:'残差连接与 LayerNorm（pre-LN vs post-LN）', tags:['transformer'],
+   d:'pre-LN 把小模型 + 大学习率的训练稳定性提上来了；残差分支按 1/√(2·n_layers) 缩放防止方差逐层放大。但 pre-LN 也不是"学习率随便调"。'},
+  {id:'B6', cat:'B', pri:'P1', t:'FFN 与 GELU', tags:['transformer'],
+   d:'先升到 4 倍宽再降回来。FFN 承担了大部分"参数容量"，注意力主要负责"信息路由"。'},
+  {id:'B7', cat:'B', pri:'P1', t:'KV cache 与增量解码', tags:['transformer','推理'],
+   d:'为什么已生成部分的 K/V 永远不变；单步复杂度如何从 O(L²) 降到 O(L)。验证方法：把"整段前向"与"逐步前向"的 logits 对比，误差应在 1e-7 量级。'},
+  {id:'B8', cat:'B', pri:'P0', t:'自回归采样、temperature、EOS 提前停止', tags:['推理'],
+   d:'变长生成的核心。注意本项目刻意"用 temperature 采样、但记录真实分布下的 log 概率"，temperature=1 时二者完全一致，语义最干净。'},
+  {id:'B9', cat:'B', pri:'P1', t:'分词（空格 vs BPE）与特殊 token', tags:['数据'],
+   d:'<pad> / <unk> / <bos> / <eos> 各自的用途。理解为什么本项目故意用最原始的分词 —— 分词不是 RLHF 的重点，避免喧宾夺主。'},
+  {id:'B10', cat:'B', pri:'P2', t:'参数量估算', tags:['transformer'],
+   d:'能自己算出 414,208 这个数字（token embed + 位置 embed + 每层注意力 + 每层 FFN + 最终 LayerNorm + lm_head）。这是判断"模型多大"的基本功。'},
+
+  /* --- C 强化学习基础 --- */
+  {id:'C1', cat:'C', pri:'P0', t:'MDP 五元组', tags:['RL'],
+   d:'状态、动作、奖励、转移、折扣。在本项目里"动作"就是下一个 token，"状态"就是已经生成的前缀 —— 把语言生成建模成 token 级 MDP 是 RLHF 的核心抽象。'},
+  {id:'C2', cat:'C', pri:'P0', t:'策略 π 与 log 概率', tags:['RL'],
+   d:'策略就是"下一个 token 的分布"；log π(a|s) 是策略梯度的原子量。注意它是对"整条回答"逐 token 求和。'},
+  {id:'C3', cat:'C', pri:'P0', t:'策略梯度定理', tags:['RL'],
+   d:'∇J = E[R · ∇log π]。直觉：采样得到的回报越高，就越用力去提高这条轨迹的概率。实现上写成"最小化负目标"。'},
+  {id:'C4', cat:'C', pri:'P0', t:'基线 / 优势函数', tags:['RL'],
+   d:'A = R − b。为什么减基线能大幅降方差却不引入偏差（因为 E[∇log π] = 0）。最简单的基线是 batch 均值。'},
+  {id:'C5', cat:'C', pri:'P1', t:'偏差-方差权衡', tags:['RL'],
+   d:'GAE 的 λ 就是在这两端插值：λ=0 是纯 TD（偏差大、方差小），λ=1 是蒙特卡洛回报（无偏、方差大）。'},
+  {id:'C6', cat:'C', pri:'P0', t:'折扣因子 γ 与 TD 误差', tags:['RL'],
+   d:'γ=1 在 RLHF 里是惯例（不做时间折扣）；δ_t = r_t + γ·V_{t+1} − V_t。'},
+  {id:'C7', cat:'C', pri:'P0', t:'GAE 广义优势估计', tags:['RL'],
+   d:'递推式 A_t = δ_t + γλ·A_{t+1}，从后往前算。变长序列下必须用 mask 处理终止，否则填充位的"垃圾优势"会倒流污染有效位。'},
+  {id:'C8', cat:'C', pri:'P0', t:'重要性采样与概率比', tags:['RL'],
+   d:'ratio = exp(logπ_new − logπ_old)。它回答了"为什么同一批数据可以更新多次"—— 因为每次更新都在纠正新旧策略的分布差异。'},
+  {id:'C9', cat:'C', pri:'P0', t:'裁剪 surrogate 与"近端"约束', tags:['RL'],
+   d:'loss = −min(ratio·A, clip(ratio,1±ε)·A)。当更新"朝着有利方向走太远"时不再给额外收益 —— 这就是 proximal 的含义。'},
+  {id:'C10', cat:'C', pri:'P1', t:'熵正则化与探索', tags:['RL'],
+   d:'−ent_coef·H(π) 鼓励策略保持一定随机性，防止过早收敛到确定性输出。熵掉到 0 通常意味着策略已经"死"了。'},
+  {id:'C11', cat:'C', pri:'P0', t:'价值函数与 critic', tags:['RL'],
+   d:'V(s) 是"从这个状态出发能拿多少回报"的估计。理解为什么它可以和奖励模型共用结构 —— 两者都是"语言骨干 + 标量头"，只是训练目标不同。'},
+
+  /* --- D RLHF 专项 --- */
+  {id:'D1', cat:'D', pri:'P0', t:'RLHF 三阶段流程', tags:['RLHF'],
+   d:'SFT（学会说人话）→ 奖励模型（学会人类偏好）→ RL（对齐）。每一步的输入、输出、checkpoint 文件都要能说清楚。'},
+  {id:'D2', cat:'D', pri:'P0', t:'偏好数据与 Bradley-Terry 模型', tags:['RLHF'],
+   d:'L = −log σ(r_chosen − r_rejected)。为什么学"比较"比学"打分"稳定 —— 人类标注比较比打分容易、一致。'},
+  {id:'D3', cat:'D', pri:'P0', t:'参考模型与 KL 惩罚', tags:['RLHF'],
+   d:'参考模型 = 冻结的 SFT 策略，是拴住策略的"安全绳"。β 越大越保守。参考模型必须保持冻结，否则绳子会跟着漂移。'},
+  {id:'D4', cat:'D', pri:'P0', t:'reward hacking（三种具体形态）', tags:['RLHF','核心'],
+   d:'① 不吐 EOS 就能骗高分（读出位置的坑）；② 只吐一个正向词（数据缺困难负例）；③ SFT 没收敛导致输出碎句。本项目三个真实案例，每一个都让 PPO 彻底崩掉过。'},
+  {id:'D5', cat:'D', pri:'P1', t:'奖励归一化与滑动统计量', tags:['RLHF'],
+   d:'为什么用跨迭代统计量而不是 batch 统计量；归一化如何让 kl_coef 变得可移植；以及它的边界 —— 不能跨骨干对齐。'},
+  {id:'D6', cat:'D', pri:'P1', t:'KL 的两种写法', tags:['RLHF'],
+   d:'写进奖励（reward shaping）vs 写进损失（正则项）。本项目用前者（与 trl / InstructGPT 一致），语义更直观。'},
+  {id:'D7', cat:'D', pri:'P2', t:'长度惩罚 / 多目标奖励', tags:['RLHF'],
+   d:'缓解 reward hacking 的常用手段，但它自己也会引入新的 hacking —— 惩罚过重会让模型提前闭嘴、语义不全。'},
+  {id:'D8', cat:'D', pri:'P2', t:'DPO 与 PPO 的关系', tags:['RLHF'],
+   d:'DPO 绕开奖励模型与强化学习，直接从偏好数据优化策略。天然免疫 reward hacking，但失去了在线采样的能力。'},
+  {id:'D9', cat:'D', pri:'P1', t:'任务级质量指标与评测独立性', tags:['评测'],
+   d:'为什么必须有一把不经过奖励模型的尺子。本项目用"含正向词率 / 概念词率 / 成句率"三个最朴素的判据，正是它们暴露了"偏好学会了、概念绑定没学会"。'},
+  {id:'D10', cat:'D', pri:'P1', t:'困难负例与数据构造', tags:['数据'],
+   d:'"只吐一个正向词"这个退化行为，加大 KL 惩罚也救不回来 —— 只能靠改数据。这是"用数据解决问题而非调参解决"的典型案例。'},
+
+  /* --- E PyTorch 工程实践 --- */
+  {id:'E1', cat:'E', pri:'P1', t:'nn.Module 与参数注册', tags:['torch'],
+   d:'为什么必须写 self.xxx = nn.Linear(...) 而不是普通属性（否则 parameters() 收不到，优化器更新不到）。'},
+  {id:'E2', cat:'E', pri:'P0', t:'state_dict 保存 / 加载与 strict=False', tags:['torch'],
+   d:'strict=False 的隐患：如果结构不匹配，它会静默留下一大堆随机初始化参数，训练出来的东西毫无意义。本项目用"只允许缺 value_head.*"的显式校验挡住它。'},
+  {id:'E3', cat:'E', pri:'P0', t:'no_grad 与"采样不可导"', tags:['torch','核心'],
+   d:'为什么 generate() 返回的 log 概率不能用（没有梯度），必须用当前策略重新算一遍。本项目在 REINFORCE 和 PPO 里各踩了一次。'},
+  {id:'E4', cat:'E', pri:'P0', t:'布尔掩码与 masked mean / sum', tags:['torch'],
+   d:'mask 在本项目里有四种用法：损失归一化、奖励落点、GAE 终止判断、KL 只在有效 token 上平均。每一种漏掉都会静默算错。'},
+  {id:'E5', cat:'E', pri:'P1', t:'dataclass 配置管理', tags:['工程'],
+   d:'Config dataclass + dataclasses.replace() 做消融 —— 生成一份改了单个参数的副本，而不是手动改全局变量。这是消融脚本能做"配对比较"的基础。'},
+  {id:'E6', cat:'E', pri:'P1', t:'梯度裁剪 clip_grad_norm_', tags:['torch'],
+   d:'防止偶发的超大梯度把参数带飞。注意它作用于"所有参数拼成的向量"，不是逐个参数独立裁剪。'},
+  {id:'E7', cat:'E', pri:'P1', t:'可复现性：种子固定', tags:['工程'],
+   d:'为什么每个 trial 都要 set_seed：否则你无法判断"改动到底有没有效果"。可复现性是实验科学的底线。'},
+
+  /* --- F 实验方法学 --- */
+  {id:'F1', cat:'F', pri:'P0', t:'训练 / 验证 / 评估集划分', tags:['实验'],
+   d:'用 eval 概念做验证，检验的是泛化而不是记忆。本项目评估集"概念词正确率 0.0%"正是这个设计暴露出来的问题。'},
+  {id:'F2', cat:'F', pri:'P0', t:'消融实验与配对比较', tags:['实验'],
+   d:'同种子 + 同起点 checkpoint + 新建有状态对象（归一化器）。只有控制住这三样，曲线上的差异才能归因给被扫的那个参数。'},
+  {id:'F3', cat:'F', pri:'P0', t:'多次采样降低评估噪声', tags:['实验'],
+   d:'生成是随机的，只采样一次的话"一个 prompt 的运气好坏就能左右全局平均"。每个 prompt 重复 8~32 次再平均是 RL 实验的基本功。'},
+  {id:'F4', cat:'F', pri:'P1', t:'最佳 checkpoint 选取', tags:['实验'],
+   d:'"acc 优先、并列比 loss"。本项目真实 bug：val_acc 第 1 个 epoch 就饱和到 1.000，导致保存的是欠训练权重。'},
+  {id:'F5', cat:'F', pri:'P1', t:'学习率敏感性', tags:['实验'],
+   d:'同一个 lr 在 LSTM 上能收敛，在 pre-LN Transformer 上可能卡住。换骨干/换结构后必须重新标定学习率。'},
+  {id:'F6', cat:'F', pri:'P1', t:'不要只看单一指标', tags:['实验','核心'],
+   d:'消融表里"奖励提升 +13.84、成句率 0.0%"就是典型的 reward hacking 现场。任何单一指标都可以被优化到失真。'},
+
+  /* --- G 本项目的"坑"清单 --- */
+  {id:'G1', cat:'G', pri:'P1', t:'old_logprobs 必须重算', tags:['坑'],
+   d:'已结束的序列后面还会继续"采样"出垃圾 token，generate 把它们记成 0，而更新阶段重算会得到真实值。两边不一致 → ratio = exp(new − old) 直接爆 inf。'},
+  {id:'G2', cat:'G', pri:'P1', t:'优势标准化后要重新乘 mask', tags:['坑'],
+   d:'标准化会平移数值，把填充位上原本为 0 的优势变成非零。虽然损失最后还会乘 mask，但中间可能出现 inf × 0 = nan。'},
+  {id:'G3', cat:'G', pri:'P1', t:'变长 GAE 的两条 mask 技巧', tags:['坑'],
+   d:'next_value = values[t+1] * mask[t+1]（序列末尾自动归零）；last_gae = (δ + γλ·last_gae) * mask[t]（填充区垃圾优势不倒流）。'},
+  {id:'G4', cat:'G', pri:'P1', t:'奖励读出位置导致 EOS 捷径', tags:['坑','核心'],
+   d:'rm_pooling="last" 时，策略只要学会"永不吐 <eos>"，就能把任何垃圾回答从 −7.92 抬到 +3.33。一个"读出位置"的设计选择就能造出一个 reward hacking。'},
+  {id:'G5', cat:'G', pri:'P1', t:'pre-LN Transformer 的学习率上限', tags:['坑'],
+   d:'sft_lr=5e-3 时 loss 卡在 0.436 不收敛（LSTM 同设置能到 0.114）。一个没学会"说人话"的策略，PPO 只会把它推得更歪。'},
+  {id:'G6', cat:'G', pri:'P1', t:'换骨干必须重跑 SFT 与 RM', tags:['坑'],
+   d:'两个骨干权重结构不同，混用会静默留下一堆随机初始化参数。train_ppo.py 里有一道显式校验挡住这种情况。'},
+  {id:'G7', cat:'G', pri:'P1', t:'奖励分数不可跨模型比较', tags:['坑'],
+   d:'每个骨干训自己的奖励模型，尺度完全不同（LSTM 归一化器 mean=+7.48，Transformer 是 −2.57）。归一化也只能在同一模型内对齐。'},
+  {id:'G8', cat:'G', pri:'P1', t:'completion_logits 的预测位偏移', tags:['坑'],
+   d:'切片必须是 [:, P-1 : T-1, :]。写成 [:, P:, :] 会整体错一位 —— 训练照样跑，loss 也降，但永远学不会正确的东西。'}
+];
+
+/* =====================================================================
+   2. 工具函数
+   ===================================================================== */
+var $  = function(s, r){ return (r || document).querySelector(s); };
+var $$ = function(s, r){ return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+function esc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function el(tag, cls, html){
+  var n = document.createElement(tag);
+  if(cls) n.className = cls;
+  if(html != null) n.innerHTML = html;
+  return n;
+}
+function code(s){ return '<code>' + esc(s) + '</code>'; }
+
+var byId = {};
+MODULES.forEach(function(m){ byId[m.id] = m; });
+var usedBy = {};
+MODULES.forEach(function(m){ usedBy[m.id] = []; });
+MODULES.forEach(function(m){
+  m.deps.forEach(function(d){ if(usedBy[d]) usedBy[d].push(m.id); });
+});
+var MODULE_COUNT = MODULES.length;
+
+/* =====================================================================
+   3. 模块卡片（§2）
+   ===================================================================== */
+(function renderModuleGrid(){
+  var host = $('#modGrid');
+  if(!host) return;
+  var frag = document.createDocumentFragment();
+  LAYERS.forEach(function(L){
+    MODULES.filter(function(m){ return m.layer === L.id; }).forEach(function(m){
+      var b = el('button', 'mod-card');
+      b.setAttribute('data-mod', m.id);
+      b.innerHTML =
+        '<div class="top"><span class="fn">' + esc(m.file) + '</span>'
+        + '<span class="lay ' + L.cls + '">' + esc(L.name) + '</span></div>'
+        + '<div class="role">' + esc(m.role) + '</div>';
+      b.addEventListener('click', function(){ openModule(m.id); });
+      frag.appendChild(b);
+    });
+  });
+  host.appendChild(frag);
+})();
+
+/* =====================================================================
+   4. 依赖矩阵（§3）
+   ===================================================================== */
+(function renderMatrix(){
+  var t = $('#mxTable');
+  if(!t) return;
+  var order = [];
+  LAYERS.forEach(function(L){
+    MODULES.filter(function(m){ return m.layer === L.id; }).forEach(function(m){ order.push(m); });
+  });
+
+  var thead = '<thead><tr><th><span class="rot">调用方 ↓ / 被调用 →</span></th>';
+  order.forEach(function(c){
+    thead += '<th title="' + esc(c.file) + '"><span class="rot">' + esc(c.short) + '</span></th>';
+  });
+  thead += '</tr></thead>';
+
+  var body = '<tbody>';
+  order.forEach(function(r){
+    body += '<tr data-row="' + r.id + '"><th data-mod="' + r.id + '" title="' + esc(r.file) + '">'
+          + esc(r.short) + '</th>';
+    order.forEach(function(c){
+      var cls = 'cell';
+      if(r.id === c.id) cls += ' self';
+      else if(r.deps.indexOf(c.id) >= 0) cls += ' hit';
+      body += '<td class="' + cls + '" data-r="' + r.id + '" data-c="' + c.id + '">'
+            + '<span class="cell"><span class="mk"></span></span></td>';
+    });
+    body += '</tr>';
+  });
+  body += '</tbody>';
+  t.innerHTML = thead + body;
+
+  var tip = $('#mxTip');
+  function clearHl(){
+    $$('#mxTable td.hl').forEach(function(td){ td.classList.remove('hl'); });
+  }
+  t.addEventListener('mouseover', function(e){
+    var td = e.target.closest('td');
+    if(!td) return;
+    clearHl();
+    var r = td.getAttribute('data-r'), c = td.getAttribute('data-c');
+    $$('#mxTable td').forEach(function(x){
+      if(x.getAttribute('data-r') === r || x.getAttribute('data-c') === c) x.classList.add('hl');
+    });
+    if(tip){
+      var has = byId[r].deps.indexOf(c) >= 0;
+      var txt = (r === c) ? (byId[r].file + '（自身）')
+              : has ? (byId[r].file + '  →  ' + byId[c].file)
+                    : (byId[r].file + '  ⇢  ' + byId[c].file + '（无依赖）');
+      tip.textContent = txt;
+      tip.classList.add('on');
+    }
+  });
+  t.addEventListener('mousemove', function(e){
+    if(!tip) return;
+    tip.style.left = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 10) + 'px';
+    tip.style.top  = Math.max(e.clientY - 34, 8) + 'px';
+  });
+  t.addEventListener('mouseleave', function(){
+    clearHl();
+    if(tip) tip.classList.remove('on');
+  });
+  t.addEventListener('click', function(e){
+    var th = e.target.closest('th[data-mod]');
+    if(th) openModule(th.getAttribute('data-mod'));
+  });
+
+  var zero = MODULES.filter(function(m){ return m.deps.length === 0; });
+  var note = $('#mxNote');
+  if(note){
+    note.innerHTML = '共 ' + MODULE_COUNT + ' 个模块。'
+      + '其中 <b style="color:var(--ok)">' + zero.length + ' 个模块没有任何项目内依赖</b>：'
+      + zero.map(function(m){ return code(m.file); }).join(' ')
+      + ' —— 这正是"算法层与基础层可以被单独拿走、单独测试"的证明。';
+  }
+})();
+
+/* =====================================================================
+   5. 依赖明细浏览器（§3）
+   ===================================================================== */
+var exCurrent = null;
+(function initExplorer(){
+  var list = $('#exList');
+  var panel = $('#exPanel');
+  if(!list || !panel) return;
+
+  LAYERS.forEach(function(L){
+    var ms = MODULES.filter(function(m){ return m.layer === L.id; });
+    if(!ms.length) return;
+    list.appendChild(el('div', 'ex-grp', esc(L.name) + ' · ' + esc(L.en)));
+    ms.forEach(function(m){
+      var b = el('button', 'ex-item', esc(m.file));
+      b.setAttribute('data-mod', m.id);
+      b.addEventListener('click', function(){ showEx(m.id); });
+      list.appendChild(b);
+    });
+  });
+
+  function chips(ids, emptyText){
+    if(!ids.length) return '<span class="none">' + esc(emptyText) + '</span>';
+    return ids.map(function(id){
+      var m = byId[id];
+      var label = m ? m.file : id;
+      return '<button class="chip" data-goto="' + esc(id) + '">' + esc(label) + '</button>';
+    }).join('');
+  }
+
+  function showEx(id){
+    var m = byId[id];
+    if(!m) return;
+    exCurrent = id;
+    $$('.ex-item').forEach(function(b){
+      b.classList.toggle('on', b.getAttribute('data-mod') === id);
+    });
+    var L = LAYERS.filter(function(x){ return x.id === m.layer; })[0];
+    var dep = m.deps, up = usedBy[m.id] || [];
+    panel.innerHTML =
+        '<h3>' + esc(m.file) + '</h3>'
+      + '<p class="role">' + esc(m.role) + '</p>'
+      + '<div class="ex-sec"><div class="h">层级</div>'
+      + '<span class="lay ' + L.cls + '">' + esc(L.name) + ' · ' + esc(L.en) + '</span></div>'
+      + '<div class="ex-sec"><div class="h">对外接口（' + m.funcs.length + '）</div>'
+      + '<div class="fn-list">' + m.funcs.map(function(f){ return '<span class="fn">' + esc(f) + '</span>'; }).join('') + '</div></div>'
+      + '<div class="ex-sec"><div class="h">依赖（' + dep.length + '）</div>'
+      + '<div class="ex-chips">'
+      + (dep.length ? chips(dep, '') : '<span class="zero-dep">✓ 无项目内依赖，只依赖 torch</span>')
+      + '</div></div>'
+      + '<div class="ex-sec"><div class="h">被谁依赖（' + up.length + '）</div>'
+      + '<div class="ex-chips">' + chips(up, '没有其它模块依赖它') + '</div></div>'
+      + '<div class="ex-sec"><div class="h">说明</div>'
+      + '<div class="kd-box" style="border-style:solid;border-color:var(--border);background:var(--panel-2)">'
+      + esc(m.detail) + '</div></div>';
+
+    $$('[data-goto]', panel).forEach(function(b){
+      b.addEventListener('click', function(){ showEx(b.getAttribute('data-goto')); });
+    });
+  }
+
+  showEx('ppo');
+})();
+
+/* =====================================================================
+   6. 模块详情模态框
+   ===================================================================== */
+function openModule(id){
+  var m = byId[id];
+  if(!m) return;
+  var L = LAYERS.filter(function(x){ return x.id === m.layer; })[0];
+  var up = usedBy[m.id] || [];
+  var link = function(list, empty){
+    if(!list.length) return '<span class="none">' + esc(empty) + '</span>';
+    return list.map(function(x){
+      var mm = byId[x];
+      return '<button class="chip" data-mgoto="' + esc(x) + '">' + esc(mm ? mm.file : x) + '</button>';
+    }).join('');
+  };
+  $('#modalBody').innerHTML =
+      '<h3>' + esc(m.file) + '</h3>'
+    + '<p class="mrole">' + esc(m.role) + '</p>'
+    + '<div class="msec"><span class="lay ' + L.cls + '">' + esc(L.name) + ' · ' + esc(L.en) + '</span></div>'
+    + '<div class="msec"><div class="h">对外接口</div><div class="fn-list">'
+    + m.funcs.map(function(f){ return '<span class="fn">' + esc(f) + '</span>'; }).join('')
+    + '</div></div>'
+    + '<div class="msec"><div class="h">依赖</div><div class="ex-chips">'
+    + (m.deps.length ? link(m.deps, '') : '<span class="zero-dep">✓ 无项目内依赖，只依赖 torch</span>')
+    + '</div></div>'
+    + '<div class="msec"><div class="h">被谁依赖</div><div class="ex-chips">'
+    + link(up, '没有其它模块依赖它') + '</div></div>'
+    + '<div class="msec"><div class="h">设计说明</div>'
+    + '<div class="callout" style="border-left-color:var(--accent-2)">' + esc(m.detail) + '</div></div>';
+
+  $$('#modalBody [data-mgoto]').forEach(function(b){
+    b.addEventListener('click', function(){ openModule(b.getAttribute('data-mgoto')); });
+  });
+  $('#modalBg').classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(){
+  $('#modalBg').classList.remove('on');
+  document.body.style.overflow = '';
+}
+(function initModal(){
+  $('#modalX').addEventListener('click', closeModal);
+  $('#modalBg').addEventListener('click', function(e){
+    if(e.target === $('#modalBg')) closeModal();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') closeModal();
+  });
+})();
+
+/* 架构图里的 chip 也打开模态框 */
+$$('#archStack .chip[data-mod]').forEach(function(b){
+  b.addEventListener('click', function(){
+    $$('#archStack .arch-layer').forEach(function(l){
+      l.classList.toggle('sel', l.getAttribute('data-layer') === byId[b.getAttribute('data-mod')].layer);
+    });
+    openModule(b.getAttribute('data-mod'));
+  });
+});
+
+/* =====================================================================
+   7. 主题切换
+   ===================================================================== */
+(function initTheme(){
+  var root = document.documentElement;
+  var btn = $('#themeBtn');
+  var saved = null;
+  try { saved = localStorage.getItem('rlhf-mini-theme'); } catch(e){}
+  if(saved === 'light' || saved === 'dark') root.setAttribute('data-theme', saved);
+  function sync(){
+    btn.textContent = root.getAttribute('data-theme') === 'light' ? '☀' : '◐';
+  }
+  sync();
+  btn.addEventListener('click', function(){
+    var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('rlhf-mini-theme', next); } catch(e){}
+    sync();
+  });
+})();
+
+/* =====================================================================
+   8. 导航：滚动监听 + 进度条 + 回到顶部
+   ===================================================================== */
+(function initNav(){
+  var links = $$('#navLinks a');
+  var secs = links.map(function(a){ return document.getElementById(a.getAttribute('href').slice(1)); });
+  var prog = $('#navProg');
+  var top = $('#toTop');
+
+  function onScroll(){
+    var y = window.scrollY || window.pageYOffset;
+    var docH = document.documentElement.scrollHeight - window.innerHeight;
+    if(prog) prog.style.width = (docH > 0 ? (y / docH) * 100 : 0) + '%';
+    if(top) top.classList.toggle('on', y > 520);
+
+    var idx = 0;
+    for(var i = 0; i < secs.length; i++){
+      if(secs[i] && secs[i].offsetTop - 130 <= y) idx = i;
+    }
+    links.forEach(function(a, i){ a.classList.toggle('on', i === idx); });
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('resize', onScroll);
+  onScroll();
+
+  if(top) top.addEventListener('click', function(){
+    window.scrollTo({top:0, behavior:'smooth'});
+  });
+})();
+
+/* =====================================================================
+   9. 数据流标签页（§4）
+   ===================================================================== */
+(function initFlow(){
+  var tabs = $$('#flowTabs .ftab');
+  tabs.forEach(function(tab){
+    tab.addEventListener('click', function(){
+      tabs.forEach(function(t){ t.classList.remove('on'); });
+      tab.classList.add('on');
+      var target = tab.getAttribute('data-flow');
+      $$('.flow-body').forEach(function(b){
+        b.classList.toggle('on', b.id === target);
+      });
+    });
+  });
+})();
+
+/* =====================================================================
+   10. 手风琴（§7）
+   ===================================================================== */
+$$('.acc-h').forEach(function(h){
+  h.addEventListener('click', function(){
+    h.parentNode.classList.toggle('open');
+  });
+});
+
+/* =====================================================================
+   11. 知识清单（§6）
+   ===================================================================== */
+(function initKnowledge(){
+  var host = $('#kList');
+  if(!host) return;
+
+  var state = { cat:'ALL', pri:'ALL', q:'', hideDone:false, done:{} };
+  try {
+    var raw = localStorage.getItem('rlhf-mini-knowledge');
+    if(raw) state.done = JSON.parse(raw) || {};
+  } catch(e){ state.done = {}; }
+
+  function save(){
+    try { localStorage.setItem('rlhf-mini-knowledge', JSON.stringify(state.done)); } catch(e){}
+  }
+
+  /* --- 分类筛选按钮 --- */
+  var catHost = $('#catFilters');
+  var allBtn = el('button', 'fchip on', '全部 <span class="cnt">' + KNOW.length + '</span>');
+  allBtn.setAttribute('data-cat', 'ALL');
+  catHost.appendChild(allBtn);
+  CATS.forEach(function(c){
+    var n = KNOW.filter(function(k){ return k.cat === c.id; }).length;
+    var b = el('button', 'fchip', esc(c.id) + ' <span class="cnt">' + n + '</span>');
+    b.setAttribute('data-cat', c.id);
+    b.title = c.name;
+    catHost.appendChild(b);
+  });
+
+  function bindChips(sel, key){
+    $$(sel).forEach(function(b){
+      b.addEventListener('click', function(){
+        $$(sel).forEach(function(x){ x.classList.remove('on'); });
+        b.classList.add('on');
+        state[key] = b.getAttribute(key === 'cat' ? 'data-cat' : 'data-pri');
+        render();
+      });
+    });
+  }
+  bindChips('#catFilters .fchip', 'cat');
+  bindChips('[data-pri]', 'pri');
+
+  /* --- 搜索 / 隐藏已掌握 / 重置 --- */
+  var si = $('#kSearch');
+  si.addEventListener('input', function(){ state.q = si.value.trim().toLowerCase(); render(); });
+
+  var hd = $('#kHideDone');
+  hd.addEventListener('click', function(){
+    state.hideDone = !state.hideDone;
+    hd.classList.toggle('on', state.hideDone);
+    render();
+  });
+
+  $('#kReset').addEventListener('click', function(){
+    state.done = {};
+    save();
+    render();
+  });
+
+  /* --- 渲染 --- */
+  function matches(k){
+    if(state.cat !== 'ALL' && k.cat !== state.cat) return false;
+    if(state.pri !== 'ALL' && k.pri !== state.pri) return false;
+    if(state.hideDone && state.done[k.id]) return false;
+    if(state.q){
+      var hay = (k.t + ' ' + k.d + ' ' + k.id + ' ' + k.tags.join(' ') + ' ' + CAT_NAME[k.cat].name).toLowerCase();
+      if(hay.indexOf(state.q) < 0) return false;
+    }
+    return true;
+  }
+
+  function render(){
+    var total = KNOW.length;
+    var doneN = Object.keys(state.done).filter(function(k){ return state.done[k]; }).length;
+    $('#kProgTxt').textContent = doneN + ' / ' + total;
+    $('#kProgBar').style.width = (total ? (doneN / total) * 100 : 0) + '%';
+
+    host.innerHTML = '';
+    var shown = 0;
+    CATS.forEach(function(c){
+      var items = KNOW.filter(function(k){ return k.cat === c.id && matches(k); });
+      if(!items.length) return;
+      shown += items.length;
+
+      var grp = el('div', 'k-grp');
+      var doneC = KNOW.filter(function(k){ return k.cat === c.id && state.done[k.id]; }).length;
+      var totalC = KNOW.filter(function(k){ return k.cat === c.id; }).length;
+      grp.appendChild(el('div', 'k-grp-h',
+        '<span>' + c.icon + ' ' + esc(c.id) + ' · ' + esc(c.name) + '</span>'
+        + '<span class="cnt">' + doneC + '/' + totalC + ' · ' + esc(c.note) + '</span>'
+        + '<span class="bar"></span>'));
+
+      var list = el('div', 'grid');
+      list.style.gap = '9px';
+      items.forEach(function(k){
+        var isDone = !!state.done[k.id];
+        var item = el('div', 'k-item' + (isDone ? ' done' : ''));
+        item.setAttribute('data-kid', k.id);
+
+        var chk = el('button', 'k-chk', '✓');
+        chk.title = isDone ? '标记为未掌握' : '标记为已掌握';
+        chk.addEventListener('click', function(){
+          if(state.done[k.id]) delete state.done[k.id];
+          else state.done[k.id] = 1;
+          save();
+          render();
+        });
+
+        var mid = el('div');
+        mid.innerHTML = '<div class="kt">' + esc(k.t) + '</div>'
+          + '<div class="kd">' + esc(k.d) + '</div>'
+          + '<div class="ktags">' + k.tags.map(function(t){ return '<span class="ktag">#' + esc(t) + '</span>'; }).join('')
+          + '<span class="ktag">' + esc(k.id) + '</span></div>';
+
+        item.appendChild(chk);
+        item.appendChild(mid);
+        item.appendChild(el('span', 'pri ' + k.pri, k.pri));
+        list.appendChild(item);
+      });
+      grp.appendChild(list);
+      host.appendChild(grp);
+    });
+
+    if(!shown){
+      host.appendChild(el('div', 'k-empty', '没有匹配的知识点。试试放宽筛选条件或清空搜索。'));
+    }
+  }
+
+  render();
+  var fc = $('#footKCount');
+  if(fc) fc.textContent = KNOW.length;
+})();
+
+/* =====================================================================
+   12. 首屏动画（渐进显示）
+   ===================================================================== */
+(function revealOnScroll(){
+  if(!('IntersectionObserver' in window)) return;
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(en.isIntersecting){
+        en.target.style.opacity = '1';
+        en.target.style.transform = 'none';
+        io.unobserve(en.target);
+      }
+    });
+  }, {rootMargin:'0px 0px -8% 0px', threshold:0.04});
+
+  $$('.card, .arch-layer, .tl-item, .phase, .acc, .stat').forEach(function(n){
+    n.style.opacity = '0';
+    n.style.transform = 'translateY(10px)';
+    n.style.transition = 'opacity .42s ease, transform .42s ease';
+    io.observe(n);
+  });
+})();
+
+})();
+</script>
+
+</body>
+</html>
